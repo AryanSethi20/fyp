@@ -1,7 +1,6 @@
 import json
 import random
 import time
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -26,7 +25,7 @@ logger = logging.getLogger("__env__")
 class MQTT_Environment:
     def __init__(self):
         self.client_id = f'environment-{random.randint(0, 1000)}'
-        self.broker = "broker.emqx.io"
+        self.broker = "192.168.1.3"
         self.port = 1883
         self.client = mqtt_client.Client(client_id=self.client_id)
         self.client.on_connect = self.on_connect
@@ -79,100 +78,113 @@ class AoIEnvironment:
         self.aoi_window = deque(maxlen=self.window_size)
         self.current_policy = 0
         self.time_step = 0
-        self.mu = 3.0  # Default service rate
-        self.lambda_rate = self.mu * 0.4  # Default interarrival rate
 
-        self.mu_range = np.arange(1, 5.1, 0.1)  # Discretized service rate range
+        # Initialize service and arrival rates
+        self.mu = 2.0  # Starting service rate
+        self.lambda_rate = 1.0  # Starting arrival rate
 
-        self.max_updates = max_updates  # New parameter
-        self.total_updates = 0  # Track total updates
+        # Define valid ranges
+        self.mu_min, self.mu_max = 1.0, 5.0
+        self.ratio_min, self.ratio_max = 0.2, 0.9
 
+        self.max_updates = max_updates
+        self.total_updates = 0
         self.logger = logging.getLogger("environment")
 
     def reset(self):
         self.aoi_window.clear()
         self.time_step = 0
         self.current_policy = 0
-        # FIXME: Do we need this?
-        self.mu = random.choice(self.mu_range)
-        self.lambda_rate = self.mu * 0.4
+        self.total_updates = 0
         return self.get_state()
 
     def step(self, action):
         """
         Take a step in the environment with the given action.
-        `action` is a tuple: (policy, mu, lambda_rate)
+        Action is a tuple: (policy, mu, lambda_rate)
         """
         policy, mu, lambda_rate = action
-        print(f"Step called with action: {action}")
-        print(f"Current PAoI window: {self.aoi_window}")
+        ratio = lambda_rate / mu
 
-        # Update policy, service rate, and interarrival rate
+        # Validate the ratio is within bounds
+        if not (self.ratio_min <= ratio <= self.ratio_max):
+            print(f"Warning: Invalid ratio {ratio}. Adjusting rates...")
+            if ratio < self.ratio_min:
+                lambda_rate = mu * self.ratio_min
+            elif ratio > self.ratio_max:
+                lambda_rate = mu * self.ratio_max
+
+        # Update environment parameters
         self.current_policy = policy
         self.mu = mu
         self.lambda_rate = lambda_rate
 
-        # Ensure service_rate and lambda_rate are within the valid range
-        self.logger.info(self.mu)
-        self.logger.info(self.lambda_rate)
-        self.logger.info(self.lambda_rate / self.mu)
+        # Log the current configuration
+        self.logger.info(
+            f"Current config - mu: {self.mu}, lambda: {self.lambda_rate}, ratio: {self.lambda_rate / self.mu}")
 
-        # assert self.mu in self.mu_range, "Service rate is out of range!"
-        # assert np.isclose(self.lambda_rate / self.mu,
-        #                   0.4), "Condition `lambda_rate / service_rate = 0.4` is violated!"
-
+        # Send action to MQTT
         policy_name = "ZW" if policy == 1 else "CU"
         action = {
             "policy": policy_name,
             "mu": mu,
             "lambda_rate": lambda_rate,
         }
-        self.logger.info("Sending Action {}".format(action))
         self.env.client.publish(self.env.new_actions_topic, json.dumps(action))
-        # self.publisher.publish_action_changes(policy_name, mu, lambda_rate)
 
-        # Clear the PAoI window in the subscriber
-        print(f"Resetting PAoI window and collecting new updates under policy {policy_name}...")
+        # Reset and collect new measurements
         self.subscriber.reset_paoi_window()
-
-        self.logger.info("Waiting for new paoi window...")
         self.env.received_updates.wait()
 
-        # Collect the new updates and calculate the average AoI
+        # Process new measurements
         paoi_values = self.env.retrieve_paoi_window()
         avg_aoi = np.mean(paoi_values) if paoi_values else float('nan')
-        print(f"Policy: {policy_name}, New AoI Window: {paoi_values}")
-        print(f"Policy: {policy_name}, Avg AoI: {avg_aoi}")
         self.env.received_updates.clear()
 
-        # Calculate reward
-        reward = -avg_aoi
-        self.time_step += 1
-        # done = self.time_step >= 1000  # End the episode after 1000 steps
-        # FIXME: Update counters
-        self.time_step += 1
-        self.total_updates += len(paoi_values)  # Count actual updates received
+        # Calculate reward based on AoI and rate efficiency
+        base_reward = -avg_aoi
+        efficiency_bonus = 0.1 * (ratio - self.ratio_min) / (self.ratio_max - self.ratio_min)
+        reward = base_reward + efficiency_bonus
 
-        # End condition based on total updates
+        # Update counters
+        self.time_step += 1
+        self.total_updates += len(paoi_values)
         done = self.total_updates >= self.max_updates
-        if done:
-            print(f"Simulation completed after {self.total_updates} updates")
 
-        return self.get_state(), reward, done, {}
+        return self.get_state(), reward, done, {
+            'avg_aoi': avg_aoi,
+            'ratio': ratio,
+            'efficiency_bonus': efficiency_bonus
+        }
 
 
     def get_state(self):
         """
         Get the current state representation.
-        Includes: [avg AoI, current_policy, service_rate, lambda_rate]
+        State includes: [avg AoI, current_policy, service_rate, lambda_rate, lambda/mu ratio]
         """
         avg_aoi = np.mean(self.aoi_window) if len(self.aoi_window) >= 100 else 0
-        return np.array([avg_aoi, self.current_policy, self.mu, self.lambda_rate])
+        ratio = self.lambda_rate / self.mu
+        return np.array([avg_aoi, self.current_policy, self.mu, self.lambda_rate, ratio])
+
 
 class DQNAgent:
-    def __init__(self, state_size, policies, mu_values, lambda_values):
+    def __init__(self, state_size, policies):
         self.state_size = state_size
-        self.action_space = list(itertools.product(policies, mu_values, lambda_values))  # Cartesian product
+
+        # Create discrete action space
+        self.policies = policies
+        self.mu_values = np.linspace(1.0, 5.0, 5)  # 5 discrete service rates
+        self.ratios = np.linspace(0.2, 0.9, 8)  # 8 discrete ratios
+
+        # Generate all valid combinations
+        self.action_space = []
+        for policy in policies:
+            for mu in self.mu_values:
+                for ratio in self.ratios:
+                    lambda_rate = mu * ratio
+                    self.action_space.append((policy, mu, lambda_rate))
+
         self.action_size = len(self.action_space)
         self.memory = deque(maxlen=2000)
         self.gamma = 0.99
@@ -191,11 +203,9 @@ class DQNAgent:
         self.action_to_idx = {action: idx for idx, action in enumerate(self.action_space)}
 
     def act(self, state):
-        """
-        Choose an action based on epsilon-greedy policy.
-        """
         if np.random.rand() <= self.epsilon:
             return random.choice(self.action_space)
+
         state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
         with torch.no_grad():
             action_values = self.model(state)
@@ -204,18 +214,14 @@ class DQNAgent:
 
     def _build_model(self):
         return nn.Sequential(
-            nn.Linear(self.state_size, 64),
+            nn.Linear(self.state_size, 128),
             nn.ReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(128, 128),
             nn.ReLU(),
-            nn.Linear(64, self.action_size),
+            nn.Linear(128, self.action_size),
         )
 
-    def update_target_model(self):
-        self.target_model.load_state_dict(self.model.state_dict())
-
     def remember(self, state, action, reward, next_state, done):
-        # Convert action tuple to index before storing
         action_idx = self.action_to_idx[action]
         self.memory.append((state, action_idx, reward, next_state, done))
 
@@ -226,35 +232,21 @@ class DQNAgent:
         minibatch = random.sample(self.memory, batch_size)
         states, action_idxs, rewards, next_states, dones = zip(*minibatch)
 
-        # Convert to numpy arrays first
-        states = np.array(states)
-        next_states = np.array(next_states)
-        action_idxs = np.array(action_idxs)
-        rewards = np.array(rewards)
-        dones = np.array(dones)
+        states = torch.FloatTensor(np.array(states)).to(self.device)
+        actions = torch.LongTensor(np.array(action_idxs)).to(self.device)
+        rewards = torch.FloatTensor(np.array(rewards)).to(self.device)
+        next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
+        dones = torch.FloatTensor(np.array(dones)).to(self.device)
 
-        # Convert to tensors
-        states = torch.FloatTensor(states).to(self.device)
-        actions = torch.LongTensor(action_idxs).to(self.device)
-        rewards = torch.FloatTensor(rewards).to(self.device)
-        next_states = torch.FloatTensor(next_states).to(self.device)
-        dones = torch.FloatTensor(dones).to(self.device)
-
-        # Get current Q values
         current_q_values = self.model(states)
         q_values = current_q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
 
-        # Get next Q values
         with torch.no_grad():
             next_q_values = self.target_model(next_states).max(1)[0]
 
-        # Compute target Q values
         targets = rewards + (1 - dones) * self.gamma * next_q_values
-
-        # Compute loss
         loss = nn.MSELoss()(q_values, targets.detach())
 
-        # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
@@ -263,6 +255,9 @@ class DQNAgent:
             self.epsilon *= self.epsilon_decay
 
         return loss.item()
+
+    def update_target_model(self):
+        self.target_model.load_state_dict(self.model.state_dict())
 
 
 # def train_rl_agent(env, agent, episodes=500, batch_size=32):
@@ -297,28 +292,26 @@ class TrainingMetrics:
     def __init__(self):
         self.episode_rewards = []
         self.moving_avg_rewards = []
-        self.cu_aoi_history = []
-        self.zw_aoi_history = []
-        self.policy_counts = {0: 0, 1: 0}  # 0: CU, 1: ZW
-        self.episode_timestamps = []
+        self.policy_history = []
+        self.mu_history = []
+        self.lambda_history = []
+        self.ratio_history = []
+        self.aoi_history = []
 
-    def update_rewards(self, episode_reward):
-        self.episode_rewards.append(episode_reward)
-        window_size = 10
+    def update(self, reward, policy, mu, lambda_rate, aoi):
+        self.episode_rewards.append(reward)
+        self.policy_history.append(policy)
+        self.mu_history.append(mu)
+        self.lambda_history.append(lambda_rate)
+        self.ratio_history.append(lambda_rate / mu)
+        self.aoi_history.append(aoi)
+
+        window_size = 100
         self.moving_avg_rewards.append(
             np.mean(self.episode_rewards[-window_size:])
             if len(self.episode_rewards) >= window_size
-            else episode_reward
+            else reward
         )
-
-    def update_aoi(self, policy, aoi_value):
-        if policy == 0:  # CU
-            self.cu_aoi_history.append(aoi_value)
-        else:  # ZW
-            self.zw_aoi_history.append(aoi_value)
-
-    def update_policy_count(self, policy):
-        self.policy_counts[policy] += 1
 
     def save_metrics(self, filename="training_metrics.json"):
         metrics = {
@@ -326,17 +319,107 @@ class TrainingMetrics:
                 "episode_rewards": self.episode_rewards,
                 "moving_avg_rewards": self.moving_avg_rewards
             },
-            "aoi_performance": {
-                "cu_aoi": self.cu_aoi_history,
-                "zw_aoi": self.zw_aoi_history
-            },
-            "policy_distribution": self.policy_counts
+            "parameters": {
+                "policy_history": self.policy_history,
+                "mu_history": self.mu_history,
+                "lambda_history": self.lambda_history,
+                "ratio_history": self.ratio_history,
+                "aoi_history": self.aoi_history
+            }
         }
         with open(filename, 'w') as f:
             json.dump(metrics, f)
 
+    def get_policy_distribution(self):
+        policy_counts = {0: 0, 1: 0}  # CU: 0, ZW: 1
+        for policy in self.policy_history:
+            policy_counts[policy] += 1
+        total = len(self.policy_history)
+        return {
+            'CU': (policy_counts[0] / total) * 100,
+            'ZW': (policy_counts[1] / total) * 100
+        }
 
-def train_rl_agent(env, agent, episodes=500, batch_size=32, window_size=10, convergence_threshold=0.01):
+    def get_rate_statistics(self):
+        # Calculate statistics for the last window_size episodes
+        window_size = min(50, len(self.mu_history))
+        recent_mu = self.mu_history[-window_size:]
+        recent_lambda = self.lambda_history[-window_size:]
+        recent_ratio = self.ratio_history[-window_size:]
+
+        return {
+            'mu': {
+                'mean': np.mean(recent_mu),
+                'std': np.std(recent_mu),
+                'min': np.min(recent_mu),
+                'max': np.max(recent_mu)
+            },
+            'lambda': {
+                'mean': np.mean(recent_lambda),
+                'std': np.std(recent_lambda),
+                'min': np.min(recent_lambda),
+                'max': np.max(recent_lambda)
+            },
+            'ratio': {
+                'mean': np.mean(recent_ratio),
+                'std': np.std(recent_ratio),
+                'min': np.min(recent_ratio),
+                'max': np.max(recent_ratio)
+            }
+        }
+
+    def get_performance_metrics(self):
+        window_size = min(50, len(self.aoi_history))
+        recent_aoi = self.aoi_history[-window_size:]
+        recent_rewards = self.episode_rewards[-window_size:]
+
+        return {
+            'aoi': {
+                'mean': np.mean(recent_aoi),
+                'std': np.std(recent_aoi)
+            },
+            'reward': {
+                'mean': np.mean(recent_rewards),
+                'std': np.std(recent_rewards)
+            }
+        }
+
+
+def print_training_summary(metrics):
+    print("\nTraining Summary")
+    print("=" * 50)
+    print(f"Total Episodes: {len(metrics.episode_rewards)}")
+    print(f"Final Average Reward: {metrics.moving_avg_rewards[-1]:.2f}")
+
+    print("\nPolicy Distribution")
+    print("-" * 20)
+    dist = metrics.get_policy_distribution()
+    print(f"CU Policy: {dist['CU']:.1f}%")
+    print(f"ZW Policy: {dist['ZW']:.1f}%")
+
+    print("\nRate Statistics (Last 50 Episodes)")
+    print("-" * 20)
+    stats = metrics.get_rate_statistics()
+
+    print(f"Service Rate (μ):")
+    print(f"  Mean: {stats['mu']['mean']:.2f} ± {stats['mu']['std']:.2f}")
+    print(f"  Range: [{stats['mu']['min']:.2f}, {stats['mu']['max']:.2f}]")
+
+    print(f"\nArrival Rate (λ):")
+    print(f"  Mean: {stats['lambda']['mean']:.2f} ± {stats['lambda']['std']:.2f}")
+    print(f"  Range: [{stats['lambda']['min']:.2f}, {stats['lambda']['max']:.2f}]")
+
+    print(f"\nRatio (λ/μ):")
+    print(f"  Mean: {stats['ratio']['mean']:.2f} ± {stats['ratio']['std']:.2f}")
+    print(f"  Range: [{stats['ratio']['min']:.2f}, {stats['ratio']['max']:.2f}]")
+
+    print("\nPerformance Metrics (Last 50 Episodes)")
+    print("-" * 20)
+    perf = metrics.get_performance_metrics()
+    print(f"Average AoI: {perf['aoi']['mean']:.2f} ± {perf['aoi']['std']:.2f}")
+    print(f"Average Reward: {perf['reward']['mean']:.2f} ± {perf['reward']['std']:.2f}")
+
+def train_rl_agent(env, agent, episodes=500, batch_size=32, window_size=100, convergence_threshold=0.01):
     metrics = TrainingMetrics()
     best_reward = float('-inf')
     episodes_without_improvement = 0
@@ -346,23 +429,16 @@ def train_rl_agent(env, agent, episodes=500, batch_size=32, window_size=10, conv
         state = env.reset()
         episode_reward = 0
         step_count = 0
-        episode_aois = []
 
         while True:
             action = agent.act(state)
-            policy = action[0]
-            metrics.update_policy_count(policy)
-            logger.info(f"Testing policy: {'ZW' if policy == 1 else 'CU'}")
+            next_state, reward, done, info = env.step(action)
 
-            next_state, reward, done, _ = env.step(action)
-            logger.info(f"State: {next_state}, Reward: {reward}, Action: {action}")
+            # Log metrics
+            metrics.update(reward, action[0], action[1], action[2], info['avg_aoi'])
 
             episode_reward += reward
             step_count += 1
-
-            # Track AoI (negative of reward since reward = -avg_aoi)
-            episode_aois.append(-reward)
-            metrics.update_aoi(policy, -reward)
 
             agent.remember(state, action, reward, next_state, done)
             state = next_state
@@ -371,16 +447,14 @@ def train_rl_agent(env, agent, episodes=500, batch_size=32, window_size=10, conv
                 agent.replay(batch_size)
 
             if done:
-                metrics.update_rewards(episode_reward)
                 avg_reward = np.mean(metrics.episode_rewards[-window_size:]) if len(
                     metrics.episode_rewards) >= window_size else episode_reward
 
                 logger.info(f"Episode {e + 1}/{episodes}")
                 logger.info(f"Total Reward: {episode_reward:.2f}")
                 logger.info(f"Average Reward (last {window_size} episodes): {avg_reward:.2f}")
-                logger.info(f"Steps this episode: {step_count}")
+                logger.info(f"Current mu: {action[1]:.2f}, lambda: {action[2]:.2f}, ratio: {action[2] / action[1]:.2f}")
 
-                # Save metrics every 10 episodes
                 if e % 10 == 0:
                     metrics.save_metrics()
 
@@ -396,13 +470,6 @@ def train_rl_agent(env, agent, episodes=500, batch_size=32, window_size=10, conv
                     metrics.save_metrics()
                     return True, metrics
 
-                if len(metrics.episode_rewards) >= window_size:
-                    recent_std = np.std(metrics.episode_rewards[-window_size:])
-                    if recent_std < convergence_threshold:
-                        logger.info(f"Convergence achieved after {e + 1} episodes")
-                        metrics.save_metrics()
-                        return True, metrics
-
                 break
 
         if e % 10 == 0:
@@ -411,56 +478,16 @@ def train_rl_agent(env, agent, episodes=500, batch_size=32, window_size=10, conv
     metrics.save_metrics()
     return False, metrics
 
-# def train_rl_agent(env, agent, episodes=500, batch_size=32):
-#     policy_counts = {0: 0, 1: 0}  # Track how many times each policy is chosen
-#
-#     for e in range(episodes):
-#         state = env.reset()
-#         total_reward = 0
-#
-#         while True:
-#             action = agent.act(state)
-#             policy = action[0]  # Extract just the policy from the action tuple
-#             policy_counts[policy] += 1  # Count the policy choice
-#
-#             logger.info(f"Testing policy: {'ZW' if policy == 1 else 'CU'}")
-#
-#             # Log policy distribution every 100 steps
-#             total_actions = sum(policy_counts.values())
-#             if total_actions % 100 == 0:
-#                 cu_percent = (policy_counts[0] / total_actions) * 100
-#                 zw_percent = (policy_counts[1] / total_actions) * 100
-#                 logger.info(f"Policy distribution - CU: {cu_percent:.1f}%, ZW: {zw_percent:.1f}%")
-#
-#             next_state, reward, done, _ = env.step(action)
-#
-#             # Log state, action, and reward
-#             logger.info(f"State: {next_state}, Reward: {reward}, Action: {action}")
-#
-#             agent.remember(state, action, reward, next_state, done)
-#             state = next_state
-#             total_reward += reward
-#
-#             if done:
-#                 logger.info(f"Episode {e + 1}/{episodes}, Total Reward: {total_reward}")
-#                 break
-#
-#             if len(agent.memory) > batch_size:
-#                 agent.replay(batch_size)
-#
-#         if e % 10 == 0:
-#             agent.update_target_model()
-
 if __name__ == "__main__":
     try:
         logging.basicConfig(level=logging.DEBUG)
         publisher = EnhancedMQTTPublisher()
         subscriber = EnhancedMQTTSubscriber()
-        desired_updates = 500  # Set this to your desired number of updates
+        desired_updates = 10000  # Set this to your desired number of updates
         env = AoIEnvironment(
             publisher,
             subscriber,
-            window_size=10,
+            window_size=100,
             max_updates=desired_updates
         )
         # env = AoIEnvironment(publisher, subscriber)
@@ -470,20 +497,18 @@ if __name__ == "__main__":
         mqtt_thread.start()
 
         policies = [0, 1]  # CU or ZW
-        mu_values = [1.0, 1.5, 2.0, 2.5, 3.0]
-        lambda_values = [x * 0.4 for x in mu_values]
 
         state_size = env.get_state().shape[0]
-        agent = DQNAgent(state_size, policies, mu_values, lambda_values)
+        agent = DQNAgent(state_size, policies)
 
         # Train with metrics collection
         converged, metrics = train_rl_agent(
             env,
             agent,
-            # episodes=500,
-            episodes=10, # FIXME: For Sampling (Presentation)
+            episodes=500,
+            # episodes=10, # FIXME: For Sampling (Presentation)
             batch_size=32,
-            window_size=10,
+            window_size=100,
             convergence_threshold=0.01
         )
 
@@ -492,13 +517,7 @@ if __name__ == "__main__":
         else:
             print("Maximum episodes reached without convergence.")
 
-        print("\nTraining Summary:")
-        print(f"Total Episodes: {len(metrics.episode_rewards)}")
-        print(f"Final Average Reward: {metrics.moving_avg_rewards[-1]:.2f}")
-        print("\nPolicy Distribution:")
-        total_actions = sum(metrics.policy_counts.values())
-        print(f"CU Policy: {(metrics.policy_counts[0]/total_actions)*100:.1f}%")
-        print(f"ZW Policy: {(metrics.policy_counts[1]/total_actions)*100:.1f}%")
+        print_training_summary(metrics)
 
     except KeyboardInterrupt:
         print("Shutting down gracefully...")

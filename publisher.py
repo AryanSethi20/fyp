@@ -16,7 +16,7 @@ timeFormat = "%H-%M-%S.%f"
 
 class PublisherEnvironment:
     def __init__(self):
-        self.broker = "broker.emqx.io"
+        self.broker = "192.168.1.3"
         self.port = 1883
         self.status_update_topic = "artc1/status_update"
         self.policy_topic = "artc1/policy"
@@ -29,8 +29,8 @@ class PublisherEnvironment:
         self.total_updates = 0
         self.ZW_policy_flag = Event()
         self.ack_flag = Event()
-        self.window_size = 10 # FIXME: For Simulation (Presentation)
-        # self.window_size = 100
+        # self.window_size = 10 # FIXME: For Simulation (Presentation)
+        self.window_size = 100
         self.new_action = Event()
         self.initialized = Event()  # New flag for initialization
 
@@ -311,12 +311,12 @@ class AutonomousPublisher:
         self.logger.info(f"Metrics saved to {filename}")
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    publisher = AutonomousPublisher("best_model.pth")
-    publisher.run_simulation(simulation_time=300)  # Run for 5 minutes
-
 # if __name__ == "__main__":
 #     logging.basicConfig(level=logging.DEBUG)
-#     publisher = EnhancedMQTTPublisher()
-#     publisher.run()
+#     publisher = AutonomousPublisher("best_model.pth")
+#     publisher.run_simulation(simulation_time=300)  # Run for 5 minutes
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    publisher = EnhancedMQTTPublisher()
+    publisher.run()
