@@ -8,14 +8,14 @@ import numpy as np
 
 class MQTTEnvironment:
     def __init__(self):
-        self.broker = "192.168.1.3"
+        self.broker = "192.168.0.105"
         self.port = 1883
         self.status_update_topic = "artc1/status_update"
         self.policy_topic = "artc1/policy"
         self.ack_topic = "artc1/ack"  # ACK topic
         self.send_status_update_topic = "artc1/send_status_update"
         # self.window_size = 10  # FIXME: For Simulation (Presentation)
-        self.window_size = 100
+        self.window_size = 5
         self.paoi_window = deque(maxlen=self.window_size)
 
 class EnhancedMQTTSubscriber:
@@ -43,7 +43,7 @@ class EnhancedMQTTSubscriber:
             self.logger.info(f"Received message: {msg.payload.decode()}")
             status_update = json.loads(msg.payload)
             mu = status_update["service_rate"]
-            service_time = np.random.exponential(scale=1 / mu)
+            service_time = np.random.exponential(scale= 1 / mu)
             paoi = time.time() - status_update["generation_time"] + service_time
 
             # Send ACK for ZW policy

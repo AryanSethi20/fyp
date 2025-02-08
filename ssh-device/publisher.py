@@ -29,8 +29,8 @@ class PublisherEnvironment:
         self.total_updates = 0
         self.ZW_policy_flag = Event()
         self.ack_flag = Event()
-        # self.window_size = 10 # FIXME: For Simulation (Presentation)
-        self.window_size = 100
+        # self.window_size = 10
+        self.window_size = 5
         self.new_action = Event()
         self.initialized = Event()  # New flag for initialization
 
@@ -122,7 +122,7 @@ class EnhancedMQTTPublisher:
                 else:
                     self.publish_status_update("CU")
                     self.last_update_time = time.time()
-                    time.sleep(self.env.lambda_rate)
+                time.sleep(self.env.lambda_rate)
 
         except KeyboardInterrupt:
             self.logger.warning("\nDisconnecting publisher")
@@ -196,8 +196,8 @@ class AutonomousPublisher:
     def load_model(self, model_path):
         try:
             policies = [0, 1]
-            mu_values = [1.0, 1.5, 2.0, 2.5, 3.0]
-            lambda_values = [x * 0.4 for x in mu_values]
+            mu_values = [1.0, 1.5, 2.0, 2.5, 3.0] # FIXME: Change this to account for all the mu values possible
+            lambda_values = [x * 0.4 for x in mu_values] # FIXME: Change this to account for all the lambda values possible
             state_size = 4
 
             model = ModelInference(model_path, state_size, policies, mu_values, lambda_values)
@@ -312,9 +312,9 @@ class AutonomousPublisher:
 
 
 # if __name__ == "__main__":
-#     logging.basicConfig(level=logging.DEBUG)
-#     publisher = AutonomousPublisher("best_model.pth")
-#     publisher.run_simulation(simulation_time=300)  # Run for 5 minutes
+#    logging.basicConfig(level=logging.DEBUG)
+#    publisher = AutonomousPublisher("best_model.pth")
+#    publisher.run_simulation(simulation_time=300)  # Run for 5 minutes
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)

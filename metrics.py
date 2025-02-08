@@ -1,101 +1,163 @@
 import json
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import stats
-from pathlib import Path
 
 
-def plot_aoi_correlation(metrics_file):
-    # Load data from file
-    print(f"Loading data from {metrics_file}")
-    with open(metrics_file, 'r') as f:
-        metrics = json.load(f)
+def plot_training_metrics(metrics_file="training_metrics.json"):
+    # Parameters
+    num_episodes = 150
+    actions_per_episode = 100
+    episodes = range(1, num_episodes + 1)
 
-    # Extract the values
-    if 'detailed_metrics' in metrics:
-        # Convert service times to rates (1/service_time)
-        service_rates = [1 / t for t in metrics['detailed_metrics']['service_times']]
-        aoi_values = metrics['detailed_metrics']['cu_aoi_values']
-    else:
-        raise ValueError("File format not recognized. Please ensure it contains detailed_metrics.")
+    # Initialize lists to store data from all runs
+    all_runs_rewards = []
+    all_runs_policies = []
+    all_runs_mu = []
+    all_runs_lambda = []
+    all_runs_ratio = []
+    all_runs_aoi = []
 
-    if len(service_rates) != len(aoi_values):
-        raise ValueError(f"Length mismatch: {len(service_rates)} service rates vs {len(aoi_values)} AoI values")
+    # Load and process data from all runs
+    for i in range(1, 5):
+        try:
+            with open(metrics_file + f"/training_metrics-{i}.json", 'r') as f:
+                metrics = json.load(f)
 
-    # Filter data to keep only values between 0 and 10 on the x-axis
-    filtered_data = [(sr, aoi) for sr, aoi in zip(service_rates, aoi_values) if 0 <= sr <= 10]
-    if not filtered_data:
-        raise ValueError("No data points fall within the x-axis range of 0 to 10.")
+            # Extract and trim data to desired length
+            rewards = metrics.get('rewards', {}).get('episode_rewards', [])[:actions_per_episode * num_episodes]
+            parameters = metrics.get('parameters', {})
 
-    service_rates, aoi_values = zip(*filtered_data)
+            policy_history = parameters.get('policy_history', [])[:actions_per_episode * num_episodes]
+            mu_history = parameters.get('mu_history', [])[:actions_per_episode * num_episodes]
+            lambda_history = parameters.get('lambda_history', [])[:actions_per_episode * num_episodes]
+            ratio_history = parameters.get('ratio_history', [])[:actions_per_episode * num_episodes]
+            aoi_history = parameters.get('aoi_history', [])[:actions_per_episode * num_episodes]
 
-    # Calculate correlation coefficient
-    correlation, p_value = stats.pearsonr(service_rates, aoi_values)
+            # Calculate episode averages
+            episode_rewards = []
+            episode_policies = []
+            episode_mu = []
+            episode_lambda = []
+            episode_ratio = []
+            episode_aoi = []
 
-    # Create figure
+            for j in range(0, len(rewards), actions_per_episode):
+                episode_rewards.append(np.mean(rewards[j:j + actions_per_episode]))
+                episode_policies.extend(policy_history[j:j + actions_per_episode])
+                episode_mu.append(np.mean(mu_history[j:j + actions_per_episode]))
+                episode_lambda.append(np.mean(lambda_history[j:j + actions_per_episode]))
+                episode_ratio.append(np.mean(ratio_history[j:j + actions_per_episode]))
+                episode_aoi.append(np.mean(aoi_history[j:j + actions_per_episode]))
+
+            all_runs_rewards.append(episode_rewards)
+            all_runs_policies.extend(episode_policies)
+            all_runs_mu.append(episode_mu)
+            all_runs_lambda.append(episode_lambda)
+            all_runs_ratio.append(episode_ratio)
+            all_runs_aoi.append(episode_aoi)
+
+        except Exception as e:
+            print(f"Error processing run {i}: {e}")
+
+    # Convert to numpy arrays and calculate means across runs
+    all_runs_rewards = np.array(all_runs_rewards)
+    mean_rewards = np.mean(all_runs_rewards, axis=0)
+    mean_mu = np.mean(all_runs_mu, axis=0)
+    mean_lambda = np.mean(all_runs_lambda, axis=0)
+    mean_ratio = np.mean(all_runs_ratio, axis=0)
+    mean_aoi = np.mean(all_runs_aoi, axis=0)
+
+    # Calculate moving averages
+    window_size = 10
+    moving_avg_rewards = [np.mean(mean_rewards[max(0, i - window_size + 1):i + 1])
+                          for i in range(len(mean_rewards))]
+
+    # Plot 1: Rewards vs Episodes
     plt.figure(figsize=(12, 8))
+    plt.plot(episodes, mean_rewards, 'b-', label='Average Reward per Episode', linewidth=1)
+    plt.plot(episodes, moving_avg_rewards, 'r-', label='Moving Average (Window=10)', linewidth=2)
+    plt.title('Average Rewards over Episode', fontsize=16, pad=20)
+    plt.xlabel('Episodes', fontsize=14)
+    plt.ylabel('Average Reward', fontsize=14)
+    plt.grid(True)
+    plt.legend(fontsize=12)
+    plt.savefig('plots/rewards-vs-episode.png', dpi=300, bbox_inches='tight')
+    plt.close()
 
-    # Create scatter plot
-    plt.scatter(service_rates, aoi_values, alpha=0.5, color='blue', label='Data points')
+    # Plot 2: Policy Distribution
+    plt.figure(figsize=(10, 10))
+    cu_count = all_runs_policies.count(0)
+    zw_count = all_runs_policies.count(1)
+    total_count = cu_count + zw_count
 
-    # Add correlation line
-    z = np.polyfit(service_rates, aoi_values, 1)
-    p = np.poly1d(z)
-    x_range = np.linspace(min(service_rates), max(service_rates), 100)
-    # plt.plot(x_range, p(x_range), "r--",
-    #          label=f'Correlation line (r={correlation:.3f})',
-    #          alpha=0.8)
+    plt.pie([cu_count / total_count * 100, zw_count / total_count * 100],
+            labels=['CU', 'ZW'],
+            autopct='%1.1f%%',
+            colors=['lightblue', 'lightgreen'])
+    plt.title('Policy Distribution Across All Runs', fontsize=16, pad=20)
+    plt.savefig('plots/policy_distribution.png', dpi=300, bbox_inches='tight')
+    plt.close()
 
-    # Add labels and title
-    plt.xlabel('Service Rate')
-    plt.ylabel('AoI (s)')
-    plt.title('AoI vs Service Rate Correlation')
+    # Plot 3: Service and Arrival Rates
+    plt.figure(figsize=(12, 8))
+    plt.plot(episodes, mean_mu, 'g-', label='μ (Service Rate)', linewidth=2)
+    plt.plot(episodes, mean_lambda, 'b-', label='λ (Arrival Rate)', linewidth=2)
+    plt.title('Average Service and Arrival Rates', fontsize=16, pad=20)
+    plt.xlabel('Episodes', fontsize=14)
+    plt.ylabel('Rate', fontsize=14)
+    plt.grid(True)
+    plt.legend(fontsize=12)
+    plt.savefig('plots/rates.png', dpi=300, bbox_inches='tight')
+    plt.close()
 
-    # Add grid
-    plt.grid(True, linestyle='--', alpha=0.7)
+    # Plot 4: λ/μ Ratio
+    plt.figure(figsize=(12, 8))
+    plt.plot(episodes, mean_ratio, 'r-', label='Average Ratio', linewidth=2)
+    plt.axhline(y=0.2, color='g', linestyle='--', label='Min Ratio (0.2)')
+    plt.axhline(y=0.9, color='r', linestyle='--', label='Max Ratio (0.9)')
+    plt.title('Average λ/μ Ratio', fontsize=16, pad=20)
+    plt.xlabel('Episodes', fontsize=14)
+    plt.ylabel('λ/μ Ratio', fontsize=14)
+    plt.grid(True)
+    plt.legend(fontsize=12)
+    plt.savefig('plots/ratio.png', dpi=300, bbox_inches='tight')
+    plt.close()
 
-    # Add correlation information in a text box
-    # text = f'Correlation coefficient (r): {correlation:.3f}\n'
-    # text += f'P-value: {p_value:.3e}\n'
-    # text += f'Slope: {z[0]:.3f}\n'
-    # text += f'Y-intercept: {z[1]:.3f}'
+    # Plot 5: AoI
+    plt.figure(figsize=(12, 8))
+    plt.plot(episodes, mean_aoi, 'b-', label='Average AoI', linewidth=2)
+    plt.title('Average Age of Information (AoI)', fontsize=16, pad=20)
+    plt.xlabel('Episodes', fontsize=14)
+    plt.ylabel('AoI', fontsize=14)
+    plt.grid(True)
+    plt.legend(fontsize=12)
+    plt.savefig('plots/aoi.png', dpi=300, bbox_inches='tight')
+    plt.close()
 
-
-    # plt.text(0.05, 0.95, text,
-    #          transform=plt.gca().transAxes,
-    #          bbox=dict(facecolor='white', alpha=0.8),
-    #          verticalalignment='top',
-    #          fontsize=10)
-
-    plt.legend()
-
-    # Print statistics
-    print("\nCorrelation Analysis:")
-    print(f"Number of points: {len(service_rates)}")
-    print(f"Service Rate range: {min(service_rates):.3f} to {max(service_rates):.3f} updates/s")
-    print(f"AoI range: {min(aoi_values):.3f} to {max(aoi_values):.3f} s")
-    print(f"Correlation coefficient (r): {correlation:.3f}")
-    print(f"P-value: {p_value:.3e}")
-    print(f"Linear regression: y = {z[0]:.3f}x + {z[1]:.3f}")
-
-    # Save and show plot
-    plt.savefig('aoi_correlation.png', dpi=300, bbox_inches='tight')
-    plt.show()
+    # Print summary statistics
+    print("\nTraining Summary Statistics:")
+    print(f"Number of Runs: 4")
+    print(f"Episodes per Run: {num_episodes}")
+    print(f"Actions per Episode: {actions_per_episode}")
+    print("\nRewards:")
+    print(f"  Mean: {np.mean(mean_rewards):.2f} ± {np.std(mean_rewards):.2f}")
+    print(f"  Range: [{np.min(mean_rewards):.2f}, {np.max(mean_rewards):.2f}]")
+    print("\nService Rate (μ):")
+    print(f"  Mean: {np.mean(mean_mu):.2f} ± {np.std(mean_mu):.2f}")
+    print(f"  Range: [{np.min(mean_mu):.2f}, {np.max(mean_mu):.2f}]")
+    print("\nArrival Rate (λ):")
+    print(f"  Mean: {np.mean(mean_lambda):.2f} ± {np.std(mean_lambda):.2f}")
+    print(f"  Range: [{np.min(mean_lambda):.2f}, {np.max(mean_lambda):.2f}]")
+    print("\nλ/μ Ratio:")
+    print(f"  Mean: {np.mean(mean_ratio):.2f} ± {np.std(mean_ratio):.2f}")
+    print(f"  Range: [{np.min(mean_ratio):.2f}, {np.max(mean_ratio):.2f}]")
+    print("\nAoI:")
+    print(f"  Mean: {np.mean(mean_aoi):.2f} ± {np.std(mean_aoi):.2f}")
+    print(f"  Range: [{np.min(mean_aoi):.2f}, {np.max(mean_aoi):.2f}]")
+    print(f"\nPolicy Distribution:")
+    print(f"  CU: {cu_count / total_count * 100:.1f}%")
+    print(f"  ZW: {zw_count / total_count * 100:.1f}%")
 
 
 if __name__ == "__main__":
-    try:
-        # Look for metrics file in current directory
-        metrics_files = list(Path('.').glob('*metrics*.json'))
-        if not metrics_files:
-            print("No metrics file found. Please ensure the file exists in the current directory.")
-            exit(1)
-
-        # Use the most recent metrics file
-        latest_file = max(metrics_files, key=lambda p: p.stat().st_mtime)
-        print(f"Using latest metrics file: {latest_file}")
-
-        plot_aoi_correlation("subscriber_metrics_20250110_141043.json")
-
-    except Exception as e:
-        print(f"Error: {e}")
+    plot_training_metrics("./Runs/8")

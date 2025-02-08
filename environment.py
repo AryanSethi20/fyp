@@ -22,10 +22,11 @@ timeFormat = '%H-%M-%S.%f'
 
 logger = logging.getLogger("__env__")
 
+
 class MQTT_Environment:
     def __init__(self):
         self.client_id = f'environment-{random.randint(0, 1000)}'
-        self.broker = "192.168.1.3"
+        self.broker = "192.168.0.105"
         self.port = 1883
         self.client = mqtt_client.Client(client_id=self.client_id)
         self.client.on_connect = self.on_connect
@@ -36,7 +37,6 @@ class MQTT_Environment:
         self.logger = logging.getLogger("mqtt_environment")
         self.paoi_window = list()
 
-    # This function handles the callback when the broker reponds to the client's MQTT connection request.
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             self.logger.info(datetime.datetime.now().strftime(
@@ -52,12 +52,10 @@ class MQTT_Environment:
             self.logger.info(f"Received message: {msg.payload.decode()}")
             payload_str = msg.payload.decode()
             try:
-                # Try parsing as comma-separated values
                 values = literal_eval(payload_str)
                 if not isinstance(values, list):
                     values = [values]
             except (ValueError, SyntaxError):
-                # If that fails, try parsing as comma-separated values
                 values = [float(x.strip()) for x in payload_str.split(',') if x.strip()]
 
             self.paoi_window = values
@@ -69,15 +67,19 @@ class MQTT_Environment:
     def retrieve_paoi_window(self):
         return self.paoi_window
 
+
 class AoIEnvironment:
-    def __init__(self, publisher, subscriber, window_size=100, max_updates=500):
+    def __init__(self, publisher, subscriber, updates_per_window=5, num_windows=20):
         self.env = MQTT_Environment()
         self.publisher = publisher
         self.subscriber = subscriber
-        self.window_size = window_size
-        self.aoi_window = deque(maxlen=self.window_size)
+        self.updates_per_window = updates_per_window
+        self.num_windows = num_windows
+        self.max_updates = updates_per_window * num_windows
+        self.aoi_window = deque(maxlen=updates_per_window)
         self.current_policy = 0
         self.time_step = 0
+        self.current_window = 0
 
         # Initialize service and arrival rates
         self.mu = 2.0  # Starting service rate
@@ -87,7 +89,11 @@ class AoIEnvironment:
         self.mu_min, self.mu_max = 1.0, 5.0
         self.ratio_min, self.ratio_max = 0.2, 0.9
 
-        self.max_updates = max_updates
+        # Add normalization constants
+        self.max_aoi = 10.0  # Maximum expected AoI value for normalization
+        self.history_size = 100  # Size of history for tracking performance
+        self.aoi_history = deque(maxlen=self.history_size)
+
         self.total_updates = 0
         self.logger = logging.getLogger("environment")
 
@@ -96,6 +102,7 @@ class AoIEnvironment:
         self.time_step = 0
         self.current_policy = 0
         self.total_updates = 0
+        self.current_window = 0
         return self.get_state()
 
     def step(self, action):
@@ -142,28 +149,59 @@ class AoIEnvironment:
         self.env.received_updates.clear()
 
         # Calculate reward based on AoI and rate efficiency
-        base_reward = -avg_aoi
-        efficiency_bonus = 0.1 * (ratio - self.ratio_min) / (self.ratio_max - self.ratio_min)
-        reward = base_reward + efficiency_bonus
+        # base_reward = -avg_aoi
+        # efficiency_bonus = 0.1 * (ratio - self.ratio_min) / (self.ratio_max - self.ratio_min)
+        # reward = base_reward + efficiency_bonus
+        reward = -avg_aoi
 
         # Update counters
         self.time_step += 1
-        self.total_updates += len(paoi_values)
-        done = self.total_updates >= self.max_updates
+        new_updates = len(paoi_values)
+        self.total_updates += new_updates
+
+        # Check if current window is complete
+        if self.total_updates % self.updates_per_window == 0:
+            self.current_window += 1
+
+        # Episode is done when we've completed all windows
+        done = self.current_window >= self.num_windows
 
         return self.get_state(), reward, done, {
             'avg_aoi': avg_aoi,
             'ratio': ratio,
-            'efficiency_bonus': efficiency_bonus
+            # 'efficiency_bonus': efficiency_bonus
         }
 
+    def _calculate_reward(self, prev_aoi, current_aoi, ratio):
+        # Normalize AoI to be in a more stable range
+        normalized_aoi = current_aoi / self.max_aoi
+
+        # AoI improvement reward with smoother scaling
+        aoi_reward = -normalized_aoi  # Base negative reward for AoI
+
+        # Add ratio penalty with smoother transition
+        ratio_penalty = 0
+        if ratio < self.ratio_min:
+            ratio_penalty = -1.0 * (self.ratio_min - ratio)
+        elif ratio > self.ratio_max:
+            ratio_penalty = -1.0 * (ratio - self.ratio_max)
+
+        # Stability bonus for maintaining good ratio
+        stability_bonus = 0
+        if self.ratio_min <= ratio <= self.ratio_max:
+            # Center point of good ratio range
+            optimal_ratio = (self.ratio_min + self.ratio_max) / 2
+            # Bonus for being closer to optimal ratio
+            stability_bonus = 0.2 * (1 - abs(ratio - optimal_ratio))
+
+        return aoi_reward + ratio_penalty + stability_bonus
 
     def get_state(self):
         """
         Get the current state representation.
         State includes: [avg AoI, current_policy, service_rate, lambda_rate, lambda/mu ratio]
         """
-        avg_aoi = np.mean(self.aoi_window) if len(self.aoi_window) >= 100 else 0
+        avg_aoi = np.mean(self.aoi_window) if len(self.aoi_window) >= self.updates_per_window else 0
         ratio = self.lambda_rate / self.mu
         return np.array([avg_aoi, self.current_policy, self.mu, self.lambda_rate, ratio])
 
@@ -174,8 +212,8 @@ class DQNAgent:
 
         # Create discrete action space
         self.policies = policies
-        self.mu_values = np.linspace(1.0, 5.0, 5)  # 5 discrete service rates
-        self.ratios = np.linspace(0.2, 0.9, 8)  # 8 discrete ratios
+        self.mu_values = np.linspace(1.0, 5.0, 2)  # discrete service rates
+        self.ratios = np.linspace(0.2, 0.9, 2)  # discrete ratios
 
         # Generate all valid combinations
         self.action_space = []
@@ -186,7 +224,7 @@ class DQNAgent:
                     self.action_space.append((policy, mu, lambda_rate))
 
         self.action_size = len(self.action_space)
-        self.memory = deque(maxlen=2000)
+        self.memory = deque(maxlen=4000)
         self.gamma = 0.99
         self.epsilon = 1.0
         self.epsilon_decay = 0.995
@@ -202,6 +240,15 @@ class DQNAgent:
         # Create action to index mapping
         self.action_to_idx = {action: idx for idx, action in enumerate(self.action_space)}
 
+    def _build_model(self):
+        return nn.Sequential(
+            nn.Linear(self.state_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.action_size),
+        )
+
     def act(self, state):
         if np.random.rand() <= self.epsilon:
             return random.choice(self.action_space)
@@ -211,15 +258,6 @@ class DQNAgent:
             action_values = self.model(state)
         action_idx = torch.argmax(action_values).item()
         return self.action_space[action_idx]
-
-    def _build_model(self):
-        return nn.Sequential(
-            nn.Linear(self.state_size, 128),
-            nn.ReLU(),
-            nn.Linear(128, 128),
-            nn.ReLU(),
-            nn.Linear(128, self.action_size),
-        )
 
     def remember(self, state, action, reward, next_state, done):
         action_idx = self.action_to_idx[action]
@@ -260,34 +298,6 @@ class DQNAgent:
         self.target_model.load_state_dict(self.model.state_dict())
 
 
-# def train_rl_agent(env, agent, episodes=500, batch_size=32):
-#     for e in range(episodes):
-#         state = env.reset()
-#         total_reward = 0
-#
-#         while True:
-#             action = agent.act(state)
-#             logger.info(f"Testing policy: {'ZW' if action == 1 else 'CU'}")
-#
-#             next_state, reward, done, _ = env.step(action)
-#
-#             # Log state, action, and reward
-#             logger.info(f"State: {next_state}, Reward: {reward}, Action: {'ZW' if action == 1 else 'CU'}")
-#
-#             agent.remember(state, action, reward, next_state, done)
-#             state = next_state
-#             total_reward += reward
-#
-#             if done:
-#                 logger.info(f"Episode {e + 1}/{episodes}, Total Reward: {total_reward}")
-#                 break
-#
-#             if len(agent.memory) > batch_size:
-#                 agent.replay(batch_size)
-#
-#         if e % 10 == 0:
-#             agent.update_target_model()
-
 class TrainingMetrics:
     def __init__(self):
         self.episode_rewards = []
@@ -306,29 +316,12 @@ class TrainingMetrics:
         self.ratio_history.append(lambda_rate / mu)
         self.aoi_history.append(aoi)
 
-        window_size = 100
+        window_size = 10
         self.moving_avg_rewards.append(
             np.mean(self.episode_rewards[-window_size:])
             if len(self.episode_rewards) >= window_size
             else reward
         )
-
-    def save_metrics(self, filename="training_metrics.json"):
-        metrics = {
-            "rewards": {
-                "episode_rewards": self.episode_rewards,
-                "moving_avg_rewards": self.moving_avg_rewards
-            },
-            "parameters": {
-                "policy_history": self.policy_history,
-                "mu_history": self.mu_history,
-                "lambda_history": self.lambda_history,
-                "ratio_history": self.ratio_history,
-                "aoi_history": self.aoi_history
-            }
-        }
-        with open(filename, 'w') as f:
-            json.dump(metrics, f)
 
     def get_policy_distribution(self):
         policy_counts = {0: 0, 1: 0}  # CU: 0, ZW: 1
@@ -341,7 +334,6 @@ class TrainingMetrics:
         }
 
     def get_rate_statistics(self):
-        # Calculate statistics for the last window_size episodes
         window_size = min(50, len(self.mu_history))
         recent_mu = self.mu_history[-window_size:]
         recent_lambda = self.lambda_history[-window_size:]
@@ -384,46 +376,55 @@ class TrainingMetrics:
             }
         }
 
+    def save_metrics(self, filename="training_metrics.json"):
+        metrics = {
+            "rewards": {
+                "episode_rewards": self.episode_rewards,
+                "moving_avg_rewards": self.moving_avg_rewards
+            },
+            "parameters": {
+                "policy_history": self.policy_history,
+                "mu_history": self.mu_history,
+                "lambda_history": self.lambda_history,
+                "ratio_history": self.ratio_history,
+                "aoi_history": self.aoi_history
+            }
+        }
+        with open(filename, 'w') as f:
+            json.dump(metrics, f)
 
 def print_training_summary(metrics):
     print("\nTraining Summary")
     print("=" * 50)
-    print(f"Total Episodes: {len(metrics.episode_rewards)}")
+    print(f"Total Episodes: {len(metrics.episode_rewards) / 20}")
     print(f"Final Average Reward: {metrics.moving_avg_rewards[-1]:.2f}")
-
     print("\nPolicy Distribution")
     print("-" * 20)
     dist = metrics.get_policy_distribution()
     print(f"CU Policy: {dist['CU']:.1f}%")
     print(f"ZW Policy: {dist['ZW']:.1f}%")
-
     print("\nRate Statistics (Last 50 Episodes)")
     print("-" * 20)
     stats = metrics.get_rate_statistics()
-
     print(f"Service Rate (μ):")
     print(f"  Mean: {stats['mu']['mean']:.2f} ± {stats['mu']['std']:.2f}")
     print(f"  Range: [{stats['mu']['min']:.2f}, {stats['mu']['max']:.2f}]")
-
     print(f"\nArrival Rate (λ):")
     print(f"  Mean: {stats['lambda']['mean']:.2f} ± {stats['lambda']['std']:.2f}")
     print(f"  Range: [{stats['lambda']['min']:.2f}, {stats['lambda']['max']:.2f}]")
-
     print(f"\nRatio (λ/μ):")
     print(f"  Mean: {stats['ratio']['mean']:.2f} ± {stats['ratio']['std']:.2f}")
     print(f"  Range: [{stats['ratio']['min']:.2f}, {stats['ratio']['max']:.2f}]")
-
     print("\nPerformance Metrics (Last 50 Episodes)")
     print("-" * 20)
     perf = metrics.get_performance_metrics()
     print(f"Average AoI: {perf['aoi']['mean']:.2f} ± {perf['aoi']['std']:.2f}")
     print(f"Average Reward: {perf['reward']['mean']:.2f} ± {perf['reward']['std']:.2f}")
 
-def train_rl_agent(env, agent, episodes=500, batch_size=32, window_size=100, convergence_threshold=0.01):
+
+def train_rl_agent(env, agent, episodes=300, batch_size=32, window_size=5, convergence_threshold=0.01):
     metrics = TrainingMetrics()
     best_reward = float('-inf')
-    episodes_without_improvement = 0
-    max_episodes_without_improvement = 50
 
     for e in range(episodes):
         state = env.reset()
@@ -454,75 +455,68 @@ def train_rl_agent(env, agent, episodes=500, batch_size=32, window_size=100, con
                 logger.info(f"Total Reward: {episode_reward:.2f}")
                 logger.info(f"Average Reward (last {window_size} episodes): {avg_reward:.2f}")
                 logger.info(f"Current mu: {action[1]:.2f}, lambda: {action[2]:.2f}, ratio: {action[2] / action[1]:.2f}")
+                logger.info(f"Windows completed: {env.current_window}/{env.num_windows}")
 
                 if e % 10 == 0:
                     metrics.save_metrics()
 
+                # Track best reward for informational purposes
                 if avg_reward > best_reward:
                     best_reward = avg_reward
-                    episodes_without_improvement = 0
-                    torch.save(agent.model.state_dict(), "best_model.pth")
-                else:
-                    episodes_without_improvement += 1
-
-                if episodes_without_improvement >= max_episodes_without_improvement:
-                    logger.info(f"Early stopping triggered after {e + 1} episodes")
-                    metrics.save_metrics()
-                    return True, metrics
+                    logger.info(f"New best reward: {best_reward:.2f}")
 
                 break
 
         if e % 10 == 0:
             agent.update_target_model()
 
+    # Save final model after training is complete
+    torch.save(agent.model.state_dict(), "final_model.pth")
     metrics.save_metrics()
-    return False, metrics
+
+    return metrics
 
 if __name__ == "__main__":
     try:
         logging.basicConfig(level=logging.DEBUG)
         publisher = EnhancedMQTTPublisher()
         subscriber = EnhancedMQTTSubscriber()
-        desired_updates = 10000  # Set this to your desired number of updates
+
+        # Initialize environment with 5 updates per window and 20 windows
         env = AoIEnvironment(
             publisher,
             subscriber,
-            window_size=100,
-            max_updates=desired_updates
+            updates_per_window=5,
+            num_windows=100
         )
-        # env = AoIEnvironment(publisher, subscriber)
+
         env.env.client.connect(env.env.broker, env.env.port)
         mqtt_thread = threading.Thread(target=env.env.client.loop_start)
         mqtt_thread.daemon = True
         mqtt_thread.start()
 
         policies = [0, 1]  # CU or ZW
-
         state_size = env.get_state().shape[0]
         agent = DQNAgent(state_size, policies)
 
-        # Train with metrics collection
-        converged, metrics = train_rl_agent(
+        # Train for full 300 episodes
+        metrics = train_rl_agent(
             env,
             agent,
-            episodes=500,
-            # episodes=10, # FIXME: For Sampling (Presentation)
+            episodes=150,
             batch_size=32,
             window_size=100,
             convergence_threshold=0.01
         )
 
-        if converged:
-            print("Model converged successfully!")
-        else:
-            print("Maximum episodes reached without convergence.")
-
+        print("Training completed for all 300 episodes!")
         print_training_summary(metrics)
 
     except KeyboardInterrupt:
         print("Shutting down gracefully...")
     except Exception as e:
         print(f"An error occurred: {e}")
+        logger.exception("Detailed error information:")
     finally:
         env.env.client.loop_stop()
         env.env.client.disconnect()
