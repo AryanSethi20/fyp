@@ -396,7 +396,7 @@ class TrainingMetrics:
 def print_training_summary(metrics):
     print("\nTraining Summary")
     print("=" * 50)
-    print(f"Total Episodes: {len(metrics.episode_rewards) / 20}")
+    print(f"Total Episodes: {len(metrics.episode_rewards) / 100}")
     print(f"Final Average Reward: {metrics.moving_avg_rewards[-1]:.2f}")
     print("\nPolicy Distribution")
     print("-" * 20)
