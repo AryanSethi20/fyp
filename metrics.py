@@ -18,7 +18,7 @@ def plot_training_metrics(metrics_file="training_metrics.json"):
     all_runs_aoi = []
 
     # Load and process data from all runs
-    for i in range(1, 5):
+    for i in range(1, 7):
         try:
             with open(metrics_file + f"/training_metrics-{i}.json", 'r') as f:
                 metrics = json.load(f)
