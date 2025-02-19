@@ -86,7 +86,7 @@ class AoIEnvironment:
         self.lambda_rate = 1.0  # Starting arrival rate
 
         # Define valid ranges
-        self.mu_min, self.mu_max = 1.0, 5.0
+        self.mu_min, self.mu_max = 2.0, 6.0
         self.ratio_min, self.ratio_max = 0.2, 0.9
 
         # Add normalization constants
@@ -212,7 +212,7 @@ class DQNAgent:
 
         # Create discrete action space
         self.policies = policies
-        self.mu_values = np.linspace(1.0, 5.0, 2)  # discrete service rates
+        self.mu_values = np.linspace(2.0, 6.0, 2)  # discrete service rates
         self.ratios = np.linspace(0.2, 0.9, 2)  # discrete ratios
 
         # Generate all valid combinations

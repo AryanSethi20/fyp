@@ -22,47 +22,50 @@ def plot_training_metrics(path: str):
     step_rewards = step_rewards[:num_episodes * actions_per_episode]
     run1 = [np.mean(step_rewards[i:i + actions_per_episode])
                        for i in range(0, len(step_rewards), actions_per_episode)]
+
     with open(path + "/training_metrics-2.json") as f:
         data = json.load(f)
     rewards_data = data.get('rewards', {})
     step_rewards = rewards_data.get('episode_rewards', [])
     run2 = [np.mean(step_rewards[i:i + actions_per_episode])
             for i in range(0, len(step_rewards), actions_per_episode)]
-    with open(path + "/training_metrics-3.json") as f:
-        data = json.load(f)
-    rewards_data = data.get('rewards', {})
-    step_rewards = rewards_data.get('episode_rewards', [])
-    run3 = [np.mean(step_rewards[i:i + actions_per_episode])
-            for i in range(0, len(step_rewards), actions_per_episode)]
-    with open(path + "/training_metrics-4.json") as f:
-        data = json.load(f)
-    rewards_data = data.get('rewards', {})
-    step_rewards = rewards_data.get('episode_rewards', [])
-    run4 = [np.mean(step_rewards[i:i + actions_per_episode])
-            for i in range(0, len(step_rewards), actions_per_episode)]
 
-    with open(path + "/training_metrics-5.json") as f:
-        data = json.load(f)
-    rewards_data = data.get('rewards', {})
-    step_rewards = rewards_data.get('episode_rewards', [])
-    run5 = [np.mean(step_rewards[i:i + actions_per_episode])
-            for i in range(0, len(step_rewards), actions_per_episode)]
+    # with open(path + "/training_metrics-3.json") as f:
+    #     data = json.load(f)
+    # rewards_data = data.get('rewards', {})
+    # step_rewards = rewards_data.get('episode_rewards', [])
+    # run3 = [np.mean(step_rewards[i:i + actions_per_episode])
+    #         for i in range(0, len(step_rewards), actions_per_episode)]
 
-    with open(path + "/training_metrics-6.json") as f:
-        data = json.load(f)
-    rewards_data = data.get('rewards', {})
-    step_rewards = rewards_data.get('episode_rewards', [])
-    run6 = [np.mean(step_rewards[i:i + actions_per_episode])
-            for i in range(0, len(step_rewards), actions_per_episode)]
+    # with open(path + "/training_metrics-4.json") as f:
+    #     data = json.load(f)
+    # rewards_data = data.get('rewards', {})
+    # step_rewards = rewards_data.get('episode_rewards', [])
+    # run4 = [np.mean(step_rewards[i:i + actions_per_episode])
+    #         for i in range(0, len(step_rewards), actions_per_episode)]
+    #
+    # with open(path + "/training_metrics-5.json") as f:
+    #     data = json.load(f)
+    # rewards_data = data.get('rewards', {})
+    # step_rewards = rewards_data.get('episode_rewards', [])
+    # run5 = [np.mean(step_rewards[i:i + actions_per_episode])
+    #         for i in range(0, len(step_rewards), actions_per_episode)]
+    #
+    # with open(path + "/training_metrics-6.json") as f:
+    #     data = json.load(f)
+    # rewards_data = data.get('rewards', {})
+    # step_rewards = rewards_data.get('episode_rewards', [])
+    # run6 = [np.mean(step_rewards[i:i + actions_per_episode])
+    #         for i in range(0, len(step_rewards), actions_per_episode)]
 
     # Plot 1
     plt.figure(figsize=(12, 8))
     plt.plot(episodes, run1, 'b-', label='Average Reward - Run 1', linewidth=1)
     plt.plot(episodes, run2, 'r-', label='Average Reward - Run 2', linewidth=1)
-    plt.plot(episodes, run3, 'g-', label='Average Reward - Run 3', linewidth=1)
-    plt.plot(episodes, run4, 'y-', label='Average Reward - Run 4', linewidth=1)
-    plt.plot(episodes, run5, 'c-', label='Average Reward - Run 5', linewidth=1)
-    plt.plot(episodes, run6, 'k-', label='Average Reward - Run 6', linewidth=1)
+    # plt.plot(episodes, run3, 'g-', label='Average Reward - Run 3', linewidth=1)
+    # plt.plot(episodes, run4, 'y-', label='Average Reward - Run 4', linewidth=1)
+    # plt.plot(episodes, run5, 'c-', label='Average Reward - Run 5', linewidth=1)
+    # plt.plot(episodes, run6, 'k-', label='Average Reward - Run 6', linewidth=1)
     plt.title('Average Rewards over Episode', fontsize=16, pad=20)
     plt.xlabel('Episodes', fontsize=14)
     plt.ylabel('Average Reward', fontsize=14)
@@ -104,5 +107,5 @@ def average_metrics(path: str):
     plt.close()
 
 if __name__ == "__main__":
-    plot_training_metrics("./Runs/8/")
-    average_metrics("./Runs/8/")
+    plot_training_metrics("./Runs/9")
+    # average_metrics("./Runs/8/")
