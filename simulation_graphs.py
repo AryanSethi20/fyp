@@ -3,7 +3,7 @@ import numpy as np
 
 # Load the metrics data
 import json
-with open('./Runs/4/inference_metrics.json', 'r') as f:
+with open('./inference_metrics.json', 'r') as f:
     metricsData = json.load(f)
 
 # Process AoI Time Series data

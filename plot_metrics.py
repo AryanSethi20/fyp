@@ -106,6 +106,40 @@ def average_metrics(path: str):
     plt.savefig(path+"/rewards-vs-episode-average-metrics.png", dpi=300, bbox_inches='tight')
     plt.close()
 
+
+def avg_varying_parameters():
+    # Load the AOI values from four different files
+    file_paths = ["/Users/aryansethi20/Downloads/fyp/Runs/9/inference_metrics-1stSize.json", "/Users/aryansethi20/Downloads/fyp/Runs/9/inference_metrics-2ndSize.json",
+                  "/Users/aryansethi20/Downloads/fyp/Runs/9/inference_metrics-3rdSize.json", "/Users/aryansethi20/Downloads/fyp/Runs/9/inference_metrics-4thSize.json",
+                  "/Users/aryansethi20/Downloads/fyp/Runs/9/inference_metrics-5thSize.json"]
+
+    mean_paoi = []
+
+    for file_path in file_paths:
+        with open(file_path, "r") as f:
+            data = json.load(f)
+
+        # Extract first 3000 AOI values
+        aoi_values = data["aoi_values"][6:3006]
+
+        # Compute mean PAoI
+        mean_paoi.append(np.mean(aoi_values))
+
+    packet_size = [83, 185, 283, 399, 590]
+    # Plot the results
+    plt.figure(figsize=(10, 6))
+    plt.plot(packet_size, mean_paoi, marker='o', markersize=4, linestyle='-')
+    plt.xlim(min(packet_size) - 50, max(packet_size) + 50)  # Expand the x-axis range
+    plt.ylim(min(mean_paoi) - 0.1, max(mean_paoi) + 0.1)  # Expand the y-axis range
+    plt.xlabel("Packet Size")
+    plt.ylabel("Mean PAoI")
+    plt.title("Mean PAoI across Different Packet Sizes")
+    plt.grid(True)
+    plt.legend(fontsize=12)
+    plt.savefig("/Users/aryansethi20/Downloads/fyp/Runs/9/mean-paoi-across-different-sizes.png", dpi=300, bbox_inches='tight')
+    plt.close()
+
 if __name__ == "__main__":
-    plot_training_metrics("./Runs/9")
+    # plot_training_metrics("./Runs/9")
     # average_metrics("./Runs/8/")
+    avg_varying_parameters()

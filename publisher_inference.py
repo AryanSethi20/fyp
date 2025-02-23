@@ -12,6 +12,60 @@ logging.basicConfig(
 )
 logger = logging.getLogger("publisher")
 
+def get_status_update(size_level, policy, mu, total_updates):
+    """
+    Returns a status update packet of different sizes based on size_level (1-5)
+    size_level 1: ~83 bytes
+    size_level 2: ~185 bytes
+    size_level 3: ~283 bytes
+    size_level 4: ~399 bytes
+    size_level 5: ~590 bytes
+    """
+    # Base packet (Size Level 1: ~83 bytes)
+    status_update = {
+        "generation_time": time.time(),
+        "policy": policy,
+        "service_rate": mu,
+        "total_updates": total_updates
+    }
+
+    if size_level >= 2:  # Add metadata (~185 bytes)
+        status_update["metadata"] = {
+            "sequence_number": total_updates,
+            "priority": "high",
+            "timestamp_ms": int(time.time() * 1000),
+            "status": "active"
+        }
+
+    if size_level >= 3:  # Add system metrics (~283 bytes)
+        status_update["system_metrics"] = {
+            "cpu_usage": random.uniform(0, 100),
+            "memory_usage": random.uniform(0, 100),
+            "network_latency": random.uniform(1, 50),
+            "queue_length": random.randint(0, 1000)
+        }
+
+    if size_level >= 4:  # Add environmental data (~399 bytes)
+        status_update["environmental_data"] = {
+            "temperature": random.uniform(20, 30),
+            "humidity": random.uniform(40, 60),
+            "pressure": random.uniform(980, 1020),
+            "location": {
+                "x": random.uniform(0, 100),
+                "y": random.uniform(0, 100),
+                "z": random.uniform(0, 100)
+            }
+        }
+
+    if size_level >= 5:  # Add historical metrics (~590 bytes)
+        status_update["historical_metrics"] = [
+            {
+                "timestamp": time.time() - i,
+                "value": random.uniform(0, 100)
+            } for i in range(4)  # Last 4 measurements
+        ]
+
+    return status_update
 
 class InferencePublisher:
     def __init__(self):
@@ -70,13 +124,19 @@ class InferencePublisher:
     def publish_status(self):
         """Publish a status update"""
         self.generation_time = time.time()
-        status_update = {
-            "generation_time": self.generation_time,
-            "update_count": self.update_count,
-            "mu": self.mu,
-            "lambda": self.lambda_rate,
-            "policy": self.policy
-        }
+        # status_update = {
+        #     "generation_time": self.generation_time,
+        #     "update_count": self.update_count,
+        #     "mu": self.mu,
+        #     "lambda": self.lambda_rate,
+        #     "policy": self.policy
+        # }
+        status_update = get_status_update(
+            size_level=1,
+            policy=self.policy,
+            mu=self.lambda_rate,
+            total_updates=self.update_count
+        )
 
         topic = f"{self.status_topic}/{self.policy}"
         self.client.publish(topic, json.dumps(status_update))
