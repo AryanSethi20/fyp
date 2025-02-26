@@ -26,7 +26,7 @@ logger = logging.getLogger("__env__")
 class MQTT_Environment:
     def __init__(self):
         self.client_id = f'environment-{random.randint(0, 1000)}'
-        self.broker = "192.168.0.105"
+        self.broker = "192.168.0.123"
         self.port = 1883
         self.client = mqtt_client.Client(client_id=self.client_id)
         self.client.on_connect = self.on_connect
@@ -376,7 +376,7 @@ class TrainingMetrics:
             }
         }
 
-    def save_metrics(self, filename="training_metrics.json"):
+    def save_metrics(self, filename="training_metrics-2.json"):
         metrics = {
             "rewards": {
                 "episode_rewards": self.episode_rewards,
@@ -471,7 +471,7 @@ def train_rl_agent(env, agent, episodes=300, batch_size=32, window_size=5, conve
             agent.update_target_model()
 
     # Save final model after training is complete
-    torch.save(agent.model.state_dict(), "final_model.pth")
+    torch.save(agent.model.state_dict(), "final_model-2.pth")
     metrics.save_metrics()
 
     return metrics
