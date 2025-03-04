@@ -212,7 +212,7 @@ class DQNAgent:
 
         # Create discrete action space
         self.policies = policies
-        self.mu_values = np.linspace(1.0, 5.0, 2)  # discrete service rates
+        self.mu_values = np.linspace(1.0, 4.0, 2)  # discrete service rates
         self.ratios = np.linspace(0.3, 0.8, 2)  # discrete ratios
 
         # Generate all valid combinations

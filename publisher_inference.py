@@ -14,12 +14,17 @@ logger = logging.getLogger("publisher")
 
 def get_status_update(size_level, policy, mu, total_updates):
     """
-    Returns a status update packet of different sizes based on size_level (1-5)
+    Returns a status update packet of different sizes based on size_level (1-10)
     size_level 1: ~83 bytes
     size_level 2: ~185 bytes
     size_level 3: ~283 bytes
     size_level 4: ~399 bytes
     size_level 5: ~590 bytes
+    size_level 6: ~820 bytes
+    size_level 7: ~1100 bytes
+    size_level 8: ~1450 bytes
+    size_level 9: ~1800 bytes
+    size_level 10: ~2200 bytes
     """
     # Base packet (Size Level 1: ~83 bytes)
     status_update = {
@@ -65,6 +70,154 @@ def get_status_update(size_level, policy, mu, total_updates):
             } for i in range(4)  # Last 4 measurements
         ]
 
+    if size_level >= 6:  # Add network statistics (~820 bytes)
+        status_update["network_statistics"] = {
+            "bandwidth": {
+                "incoming": random.uniform(0, 1000),
+                "outgoing": random.uniform(0, 1000),
+                "peak": random.uniform(500, 2000),
+                "average": random.uniform(100, 1000)
+            },
+            "packets": {
+                "sent": random.randint(1000, 10000),
+                "received": random.randint(1000, 10000),
+                "dropped": random.randint(0, 100),
+                "errors": random.randint(0, 50)
+            },
+            "connections": {
+                "active": random.randint(1, 100),
+                "idle": random.randint(0, 50),
+                "failed": random.randint(0, 20)
+            }
+        }
+
+    if size_level >= 7:  # Add detailed diagnostics (~1100 bytes)
+        status_update["diagnostics"] = {
+            "system_health": {
+                "disk_usage": {
+                    "total": random.randint(100000, 1000000),
+                    "used": random.randint(10000, 100000),
+                    "free": random.randint(50000, 500000),
+                    "read_speed": random.uniform(50, 200),
+                    "write_speed": random.uniform(30, 150)
+                },
+                "memory_details": {
+                    "total": random.randint(8000, 32000),
+                    "available": random.randint(4000, 16000),
+                    "cached": random.randint(1000, 8000),
+                    "swap_used": random.randint(0, 1000)
+                }
+            },
+            "process_info": [
+                {
+                    "pid": random.randint(1, 10000),
+                    "cpu_percent": random.uniform(0, 100),
+                    "memory_percent": random.uniform(0, 100),
+                    "status": random.choice(["running", "sleeping", "waiting"])
+                } for _ in range(3)
+            ]
+        }
+
+    if size_level >= 8:  # Add security metrics (~1450 bytes)
+        status_update["security"] = {
+            "threats_detected": {
+                "high": random.randint(0, 5),
+                "medium": random.randint(0, 10),
+                "low": random.randint(0, 20),
+                "details": [
+                    {
+                        "type": random.choice(["malware", "intrusion", "ddos", "spam"]),
+                        "severity": random.choice(["high", "medium", "low"]),
+                        "timestamp": time.time() - random.randint(0, 3600),
+                        "status": random.choice(["blocked", "quarantined", "investigating"])
+                    } for _ in range(3)
+                ]
+            },
+            "authentication": {
+                "successful_logins": random.randint(10, 100),
+                "failed_attempts": random.randint(0, 20),
+                "active_sessions": random.randint(1, 10),
+                "last_audit": time.time() - random.randint(0, 86400)
+            },
+            "encryption_status": {
+                "algorithm": "AES-256",
+                "key_rotation": time.time() - random.randint(0, 86400),
+                "certificates": ["primary", "backup", "recovery"]
+            }
+        }
+
+    if size_level >= 9:  # Add performance analytics (~1800 bytes)
+        status_update["performance_analytics"] = {
+            "response_times": [
+                {
+                    "endpoint": f"/api/v1/endpoint{i}",
+                    "min_ms": random.uniform(1, 10),
+                    "max_ms": random.uniform(50, 200),
+                    "avg_ms": random.uniform(10, 50),
+                    "percentiles": {
+                        "p50": random.uniform(10, 30),
+                        "p90": random.uniform(30, 60),
+                        "p99": random.uniform(60, 100)
+                    }
+                } for i in range(4)
+            ],
+            "resource_utilization": {
+                "threads": {
+                    "active": random.randint(10, 100),
+                    "idle": random.randint(0, 20),
+                    "blocked": random.randint(0, 5),
+                    "dead_locked": random.randint(0, 2)
+                },
+                "garbage_collection": {
+                    "collections": random.randint(10, 100),
+                    "total_time_ms": random.randint(100, 1000),
+                    "freed_memory": random.randint(1000, 10000)
+                }
+            }
+        }
+
+    if size_level >= 10:  # Add system configuration (~2200 bytes)
+        status_update["system_configuration"] = {
+            "hardware": {
+                "cpu": {
+                    "model": "Intel Xeon E5-2680",
+                    "cores": random.randint(8, 32),
+                    "frequency_ghz": random.uniform(2.0, 4.0),
+                    "cache_sizes": {
+                        "l1": 32768,
+                        "l2": 262144,
+                        "l3": 20971520
+                    }
+                },
+                "memory_modules": [
+                    {
+                        "slot": f"DIMM_{i}",
+                        "size_gb": 16,
+                        "type": "DDR4",
+                        "speed": 3200,
+                        "manufacturer": "Crucial"
+                    } for i in range(4)
+                ]
+            },
+            "software": {
+                "os": {
+                    "name": "Ubuntu Server",
+                    "version": "20.04 LTS",
+                    "kernel": "5.4.0-42-generic",
+                    "installed_packages": random.randint(1000, 2000)
+                },
+                "services": [
+                    {
+                        "name": f"service_{i}",
+                        "version": f"1.{random.randint(0, 9)}.{random.randint(0, 9)}",
+                        "status": random.choice(["running", "stopped", "restarting"]),
+                        "port": random.randint(1024, 65535),
+                        "dependencies": [f"dep_{j}" for j in range(random.randint(1, 3))]
+                    } for i in range(3)
+                ]
+            }
+        }
+
     return status_update
 
 class InferencePublisher:
@@ -76,11 +229,11 @@ class InferencePublisher:
 
         # Topics
         self.status_topic = "artc1/status_update"
-        self.action_topic = "artc1/action"
+        self.action_topic = "artc1/new_actions"
         self.ack_topic = "artc1/ack"
 
         # State variables
-        self.mu = 2.0  # Default service rate
+        self.mu = 1.0  # Default service rate
         self.lambda_rate = 1.0  # Default arrival rate
         self.policy = "CU"  # Default policy
         self.generation_time = None
@@ -91,7 +244,7 @@ class InferencePublisher:
         self.running = True
 
         # MQTT setup
-        self.client = mqtt_client.Client(self.client_id)
+        self.client = mqtt_client.Client(client_id=self.client_id)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
 
@@ -134,7 +287,7 @@ class InferencePublisher:
         status_update = get_status_update(
             size_level=1,
             policy=self.policy,
-            mu=self.lambda_rate,
+            mu=self.mu,
             total_updates=self.update_count
         )
 
