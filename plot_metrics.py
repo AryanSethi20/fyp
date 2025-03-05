@@ -283,8 +283,6 @@ def plot_peak_aoi_vs_packet_size():
     # File paths for different packet sizes
     base_path = "/Users/aryansethi20/Downloads/fyp/Runs/9/"
     file_prefixes = [
-        "inference_metrics-3rdSize",
-        "inference_metrics-4thSize",
         "inference_metrics-5thSize",
         "inference_metrics-6thSize",
         "inference_metrics-7thSize",
@@ -294,7 +292,8 @@ def plot_peak_aoi_vs_packet_size():
     ]
     
     # Packet sizes (in bytes) corresponding to each file
-    packet_sizes = [283, 399, 590, 820, 1100, 1450, 1800, 2200]  # Using the sizes from your original function
+    # packet_sizes = [283, 399, 590, 820, 1100, 1450, 1800, 2200]  # Using the sizes from your original function
+    packet_sizes = [590, 820, 1100, 1450, 1800, 2200]  # Using the sizes from your original function
     
     # Calculate average peak AoI for each packet size
     peak_aoi_values = []

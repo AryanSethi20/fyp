@@ -153,7 +153,7 @@ class MultithreadedSubscriber:
                 batch_id = self.current_config["batch_id"]
             
             self.metrics['aoi_values'].append(network_delay)
-            self.metrics['theoretical_aoi_values'].append(theoretical_paoi)  # Optional
+            self.metrics['theoretical_aoi_values'].append(theoretical_paoi)
             self.metrics['service_times'].append(service_time)
             self.metrics['policies'].append(status_update["policy"])
             self.metrics['mu_values'].append(mu)
@@ -322,7 +322,7 @@ class MultithreadedSubscriber:
             logger.info("Subscriber shutdown complete")
 
 def main():
-    subscriber = MultithreadedSubscriber("/Users/aryansethi20/Downloads/fyp/Runs/9/final_model-3rdSize.pth")
+    subscriber = MultithreadedSubscriber("/Users/aryansethi20/Downloads/fyp/Runs/9/final_model-4thSize.pth")
     subscriber.run()
 
 if __name__ == "__main__":
