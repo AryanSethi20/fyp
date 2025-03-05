@@ -205,6 +205,142 @@ class AoIEnvironment:
         ratio = self.lambda_rate / self.mu
         return np.array([avg_aoi, self.current_policy, self.mu, self.lambda_rate, ratio])
 
+class DoubleDQNAgent:
+    """
+    Double Deep Q-Network Agent implementation.
+    
+    This implementation decouples action selection and action evaluation to reduce
+    the overestimation bias that can occur in standard DQN. Actions are selected
+    using the online network but evaluated using the target network.
+    """
+    
+    def __init__(self, state_size, policies, target_update_freq=10):
+        """
+        Initialize a Double DQN agent.
+        
+        Args:
+            state_size: Dimension of the state space
+            policies: List of available policies (0 for CU, 1 for ZW)
+            target_update_freq: How often to update the target network (in episodes)
+        """
+        self.state_size = state_size
+        self.target_update_freq = target_update_freq
+
+        # Create discrete action space
+        self.policies = policies
+        self.mu_values = np.linspace(1.0, 5.0, 2)  # discrete service rates
+        self.ratios = np.linspace(0.3, 0.8, 2)  # discrete ratios
+
+        # Generate all valid combinations
+        self.action_space = []
+        for policy in policies:
+            for mu in self.mu_values:
+                for ratio in self.ratios:
+                    lambda_rate = mu * ratio
+                    self.action_space.append((policy, mu, lambda_rate))
+
+        self.action_size = len(self.action_space)
+        self.memory = deque(maxlen=4000)
+        self.gamma = 0.99
+        self.epsilon = 1.0
+        self.epsilon_decay = 0.995
+        self.epsilon_min = 0.05
+        self.learning_rate = 0.001
+        self.update_count = 0
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = self._build_model().to(self.device)
+        self.target_model = self._build_model().to(self.device)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        self.update_target_model()
+
+        # Create action to index mapping
+        self.action_to_idx = {action: idx for idx, action in enumerate(self.action_space)}
+
+    def _build_model(self):
+        """Build a neural network model for the Q-function approximation."""
+        return nn.Sequential(
+            nn.Linear(self.state_size, 128),
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, self.action_size),
+        )
+
+    def act(self, state):
+        """Select an action using epsilon-greedy policy."""
+        if np.random.rand() <= self.epsilon:
+            return random.choice(self.action_space)
+
+        state = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            action_values = self.model(state)
+        action_idx = torch.argmax(action_values).item()
+        return self.action_space[action_idx]
+
+    def remember(self, state, action, reward, next_state, done):
+        """Store experience in replay memory."""
+        action_idx = self.action_to_idx[action]
+        self.memory.append((state, action_idx, reward, next_state, done))
+
+    def replay(self, batch_size):
+        """
+        Train the model using Double DQN algorithm with experience replay.
+        
+        This method implements the Double DQN learning update which helps to reduce
+        overestimation of Q-values by using the online network to select actions and
+        the target network to evaluate those actions.
+        """
+        if len(self.memory) < batch_size:
+            return
+
+        minibatch = random.sample(self.memory, batch_size)
+        states, action_idxs, rewards, next_states, dones = zip(*minibatch)
+
+        states = torch.FloatTensor(np.array(states)).to(self.device)
+        actions = torch.LongTensor(np.array(action_idxs)).to(self.device)
+        rewards = torch.FloatTensor(np.array(rewards)).to(self.device)
+        next_states = torch.FloatTensor(np.array(next_states)).to(self.device)
+        dones = torch.FloatTensor(np.array(dones)).to(self.device)
+
+        # Get current Q values
+        current_q_values = self.model(states)
+        q_values = current_q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+
+        # Double DQN: use online network to select actions and target network to evaluate them
+        with torch.no_grad():
+            # Select actions using the online model
+            best_actions = self.model(next_states).argmax(1, keepdim=True)
+            
+            # Evaluate those actions using the target network
+            next_q_values = self.target_model(next_states).gather(1, best_actions).squeeze(1)
+            
+            # Calculate target Q values
+            targets = rewards + (1 - dones) * self.gamma * next_q_values
+
+        # Calculate loss and update online model
+        loss = nn.MSELoss()(q_values, targets.detach())
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
+        # Decay epsilon
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+        return loss.item()
+
+    def update_target_model(self):
+        """Update the target model with the current weights of the online model."""
+        self.target_model.load_state_dict(self.model.state_dict())
+        
+    def update_after_episode(self, episode):
+        """Update target network periodically based on episode count."""
+        self.update_count += 1
+        if self.update_count % self.target_update_freq == 0:
+            self.update_target_model()
+            return True
+        return False
 
 class DQNAgent:
     def __init__(self, state_size, policies):
