@@ -607,9 +607,93 @@ def train_rl_agent(env, agent, episodes=300, batch_size=32, window_size=5, conve
             agent.update_target_model()
 
     # Save final model after training is complete
-    torch.save(agent.model.state_dict(), "final_model.pth")
-    metrics.save_metrics()
+    torch.save(agent.model.state_dict(), "final_dqn_model.pth")
+    metrics.save_metrics("final_dqn_training_metrics.json")
 
+    return metrics
+
+def train_double_dqn_agent(env, agent, episodes=300, batch_size=32, window_size=5, 
+                          target_update_freq=10, save_interval=10):
+    """
+    Train a Double DQN agent in the AoI environment.
+    
+    Args:
+        env: The AoI environment
+        agent: The Double DQN agent
+        episodes: Total number of episodes to train
+        batch_size: Size of minibatch for replay
+        window_size: Window size for calculating moving average rewards
+        target_update_freq: How often to update target network (in episodes)
+        save_interval: How often to save metrics (in episodes)
+    
+    Returns:
+        metrics: Training metrics object
+    """
+    metrics = TrainingMetrics()
+    best_reward = float('-inf')
+    
+    for e in range(episodes):
+        state = env.reset()
+        episode_reward = 0
+        step_count = 0
+        
+        # Episode loop
+        while True:
+            # Select action using current policy
+            action = agent.act(state)
+            
+            # Execute action and observe next state and reward
+            next_state, reward, done, info = env.step(action)
+            
+            # Log metrics
+            metrics.update(reward, action[0], action[1], action[2], info['avg_aoi'])
+            
+            # Accumulate episode reward
+            episode_reward += reward
+            step_count += 1
+            
+            # Store experience in replay memory
+            agent.remember(state, action, reward, next_state, done)
+            state = next_state
+            
+            # Perform replay if enough samples
+            if len(agent.memory) > batch_size:
+                loss = agent.replay(batch_size)
+                
+            # Episode end
+            if done:
+                # Calculate average reward over last window_size episodes
+                avg_reward = np.mean(metrics.episode_rewards[-window_size:]) if len(
+                    metrics.episode_rewards) >= window_size else episode_reward
+                
+                # Update target network if needed (specific to Double DQN)
+                updated = agent.update_after_episode(e)
+                update_msg = "Target network updated" if updated else ""
+                
+                # Log episode results
+                logger.info(f"Episode {e+1}/{episodes} {update_msg}")
+                logger.info(f"Total Reward: {episode_reward:.2f}")
+                logger.info(f"Average Reward (last {window_size} episodes): {avg_reward:.2f}")
+                logger.info(f"Current mu: {action[1]:.2f}, lambda: {action[2]:.2f}, ratio: {action[2]/action[1]:.2f}")
+                logger.info(f"Epsilon: {agent.epsilon:.4f}")
+                logger.info(f"Windows completed: {env.current_window}/{env.num_windows}")
+                
+                # Save metrics periodically
+                if e % save_interval == 0:
+                    metrics.save_metrics(f"double_dqn_metrics_e{e}.json")
+                
+                # Track best model
+                if avg_reward > best_reward:
+                    best_reward = avg_reward
+                    logger.info(f"New best reward: {best_reward:.2f}")
+                    torch.save(agent.model.state_dict(), "best_double_dqn_model.pth")
+                
+                break
+    
+    # Save final model and metrics
+    torch.save(agent.model.state_dict(), "final_double_dqn_model.pth")
+    metrics.save_metrics("final_double_dqn_metrics.json")
+    
     return metrics
 
 if __name__ == "__main__":
@@ -633,19 +717,43 @@ if __name__ == "__main__":
 
         policies = [0, 1]  # CU or ZW
         state_size = env.get_state().shape[0]
-        agent = DQNAgent(state_size, policies)
-
+        
+        # DQN Agent
+        # agent = DQNAgent(state_size, policies)
         # Train for full 300 episodes
-        metrics = train_rl_agent(
-            env,
-            agent,
-            episodes=150,
-            batch_size=32,
-            window_size=100,
-            convergence_threshold=0.01
+        # metrics = train_rl_agent(
+        #     env,
+        #     agent,
+        #     episodes=150,
+        #     batch_size=32,
+        #     window_size=100,
+        #     convergence_threshold=0.01
+        # )
+
+        # DDQN Agent
+        agent = DoubleDQNAgent(
+            state_size=state_size,
+            policies=policies,
+            target_update_freq=5  # Update target network every 5 episodes
+        )
+        # Configure hyperparameters
+        agent.gamma = 0.99       # Discount factor
+        agent.epsilon = 1.0      # Initial exploration rate
+        agent.epsilon_decay = 0.99  # Slower decay for more exploration
+        agent.epsilon_min = 0.05  # Minimum exploration rate
+
+        metrics = train_double_dqn_agent(
+            env=env,
+            agent=agent,
+            episodes=150,        # Number of episodes
+            batch_size=32,       # Replay batch size
+            window_size=100,       # Moving average window
+            target_update_freq=5,  # Target network update frequency
+            save_interval=10     # Save metrics every 10 episodes
         )
 
-        print("Training completed for all 300 episodes!")
+
+        print("Training completed for all 150 episodes!")
         print_training_summary(metrics)
 
     except KeyboardInterrupt:
