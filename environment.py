@@ -87,7 +87,7 @@ class AoIEnvironment:
 
         # Define valid ranges
         self.mu_min, self.mu_max = 1.0, 5.0
-        self.ratio_min, self.ratio_max = 0.3, 0.8
+        self.ratio_min, self.ratio_max = 0.2, 0.9
 
         # Add normalization constants
         self.max_aoi = 10.0  # Maximum expected AoI value for normalization
