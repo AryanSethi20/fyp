@@ -87,11 +87,11 @@ class AoIEnvironment:
 
         # Define valid ranges
         self.mu_min, self.mu_max = 1.0, 5.0
-        self.ratio_min, self.ratio_max = 0.2, 0.9
+        self.ratio_min, self.ratio_max = 0.3, 0.8
 
         # Add normalization constants
         self.max_aoi = 10.0  # Maximum expected AoI value for normalization
-        self.history_size = 100  # Size of history for tracking performance
+        self.history_size = 50  # Size of history for tracking performance
         self.aoi_history = deque(maxlen=self.history_size)
 
         self.total_updates = 0
@@ -558,7 +558,7 @@ def print_training_summary(metrics):
     print(f"Average Reward: {perf['reward']['mean']:.2f} ± {perf['reward']['std']:.2f}")
 
 
-def train_rl_agent(env, agent, episodes=300, batch_size=32, window_size=5, convergence_threshold=0.01):
+def train_rl_agent(env, agent, episodes=300, batch_size=32, window_size=5, convergence_threshold=0.01, run=0):
     metrics = TrainingMetrics()
     best_reward = float('-inf')
 
@@ -584,7 +584,8 @@ def train_rl_agent(env, agent, episodes=300, batch_size=32, window_size=5, conve
                 agent.replay(batch_size)
 
             if done:
-                avg_reward = np.mean(metrics.episode_rewards[-window_size:]) if len(
+                # FIXME: Just added this for number of steps per episode
+                avg_reward = np.mean(metrics.episode_rewards[-50:]) if len(
                     metrics.episode_rewards) >= window_size else episode_reward
 
                 logger.info(f"Episode {e + 1}/{episodes}")
@@ -607,13 +608,13 @@ def train_rl_agent(env, agent, episodes=300, batch_size=32, window_size=5, conve
             agent.update_target_model()
 
     # Save final model after training is complete
-    torch.save(agent.model.state_dict(), "final_dqn_model.pth")
-    metrics.save_metrics("final_dqn_training_metrics.json")
+    torch.save(agent.model.state_dict(), f"final_dqn_model-{run}.pth")
+    metrics.save_metrics(f"final_dqn_training_metrics-{run}.json")
 
     return metrics
 
-def train_double_dqn_agent(env, agent, episodes=300, batch_size=32, window_size=5, 
-                          target_update_freq=10, save_interval=10):
+def train_double_dqn_agent(env, agent, episodes=300, batch_size=32, window_size=10, num_of_steps_per_episode=50, 
+                          target_update_freq=10, save_interval=10, run=0):
     """
     Train a Double DQN agent in the AoI environment.
     
@@ -662,8 +663,8 @@ def train_double_dqn_agent(env, agent, episodes=300, batch_size=32, window_size=
                 
             # Episode end
             if done:
-                # Calculate average reward over last window_size episodes
-                avg_reward = np.mean(metrics.episode_rewards[-window_size:]) if len(
+                # FIXME: Just added this for number of steps per episode
+                avg_reward = np.mean(metrics.episode_rewards[-50:]) if len(
                     metrics.episode_rewards) >= window_size else episode_reward
                 
                 # Update target network if needed (specific to Double DQN)
@@ -679,20 +680,20 @@ def train_double_dqn_agent(env, agent, episodes=300, batch_size=32, window_size=
                 logger.info(f"Windows completed: {env.current_window}/{env.num_windows}")
                 
                 # Save metrics periodically
-                if e % save_interval == 0:
-                    metrics.save_metrics(f"double_dqn_metrics_e{e}.json")
+                # if e % save_interval == 0:
+                #     metrics.save_metrics(f"double_dqn_metrics_e{e}-{run}.json")
                 
                 # Track best model
                 if avg_reward > best_reward:
                     best_reward = avg_reward
                     logger.info(f"New best reward: {best_reward:.2f}")
-                    torch.save(agent.model.state_dict(), "best_double_dqn_model.pth")
+                    torch.save(agent.model.state_dict(), f"best_double_dqn_model-{run}.pth")
                 
                 break
     
     # Save final model and metrics
-    torch.save(agent.model.state_dict(), "final_double_dqn_model.pth")
-    metrics.save_metrics("final_double_dqn_metrics.json")
+    torch.save(agent.model.state_dict(), f"final_double_dqn_model-{run}.pth")
+    metrics.save_metrics(f"final_double_dqn_metrics-{run}.json")
     
     return metrics
 
@@ -706,8 +707,8 @@ if __name__ == "__main__":
         env = AoIEnvironment(
             publisher,
             subscriber,
-            updates_per_window=5,
-            num_windows=100
+            updates_per_window=10,
+            num_windows=50
         )
 
         env.env.client.connect(env.env.broker, env.env.port)
@@ -734,7 +735,7 @@ if __name__ == "__main__":
         agent = DoubleDQNAgent(
             state_size=state_size,
             policies=policies,
-            target_update_freq=5  # Update target network every 5 episodes
+            target_update_freq=10  # Update target network every 5 episodes
         )
         # Configure hyperparameters
         agent.gamma = 0.99       # Discount factor
@@ -747,8 +748,8 @@ if __name__ == "__main__":
             agent=agent,
             episodes=150,        # Number of episodes
             batch_size=32,       # Replay batch size
-            window_size=100,       # Moving average window
-            target_update_freq=5,  # Target network update frequency
+            window_size=50,       # Moving average window
+            target_update_freq=10,  # Target network update frequency
             save_interval=10     # Save metrics every 10 episodes
         )
 

@@ -6,7 +6,7 @@ import numpy as np
 def plot_training_metrics(metrics_file="training_metrics.json"):
     # Parameters
     num_episodes = 150
-    actions_per_episode = 100
+    actions_per_episode = 50
     episodes = range(1, num_episodes + 1)
 
     # Initialize lists to store data from all runs

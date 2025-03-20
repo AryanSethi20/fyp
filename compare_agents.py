@@ -36,8 +36,8 @@ def compare_agents(num_episodes=150, num_runs=3):
         env = AoIEnvironment(
             publisher,
             subscriber,
-            updates_per_window=5,
-            num_windows=100
+            updates_per_window=10,
+            num_windows=50
         )
         
         # Set up MQTT connection
@@ -52,31 +52,39 @@ def compare_agents(num_episodes=150, num_runs=3):
         
         try:
             # Train standard DQN
-            logger.info(f"Run {run+1}: Training standard DQN")
+            logger.info(f"Run {run+1}/{num_runs}: Training standard DQN")
             dqn_agent = DQNAgent(state_size, policies)
             dqn_metrics = train_rl_agent(
                 env=env,
                 agent=dqn_agent,
                 episodes=num_episodes,
                 batch_size=32,
-                window_size=100
+                window_size=50,
+                run=run
             )
-            dqn_rewards.append(dqn_metrics.moving_avg_rewards)
+            print_training_summary(dqn_metrics)
+            rewards = [np.mean(dqn_metrics.episode_rewards[i:i + 50])
+                       for i in range(0, len(dqn_metrics.episode_rewards), 50)]
+            dqn_rewards.append(rewards)
             
             # Reset environment
             env.reset()
             
             # Train Double DQN
-            logger.info(f"Run {run+1}: Training Double DQN")
+            logger.info(f"Run {run+1}/{num_runs}: Training Double DQN")
             double_dqn_agent = DoubleDQNAgent(state_size, policies)
             double_dqn_metrics = train_double_dqn_agent(
                 env=env,
                 agent=double_dqn_agent,
                 episodes=num_episodes,
                 batch_size=32,
-                window_size=100
+                window_size=50,
+                run=run
             )
-            double_dqn_rewards.append(double_dqn_metrics.moving_avg_rewards)
+            print_training_summary(double_dqn_metrics)
+            rewards = [np.mean(double_dqn_metrics.episode_rewards[i:i + 50])
+                       for i in range(0, len(double_dqn_metrics.episode_rewards), 50)]
+            double_dqn_rewards.append(rewards)
             
         finally:
             # Clean up MQTT
@@ -94,7 +102,7 @@ def compare_agents(num_episodes=150, num_runs=3):
         'episodes': list(range(1, num_episodes + 1))
     }
     
-    with open('agent_comparison.json', 'w') as f:
+    with open('agent_comparison_1.json', 'w') as f:
         json.dump(comparison_data, f)
     
     # Plot comparison
@@ -132,10 +140,10 @@ def plot_comparison(data):
     plt.grid(True)
     
     plt.tight_layout()
-    plt.savefig('dqn_vs_double_dqn.png')
+    plt.savefig('dqn_vs_double_dqn_1.png')
     plt.show()
 
-def load_and_visualize_results(filename='agent_comparison.json'):
+def load_and_visualize_results(filename='agent_comparison_1.json'):
     """
     Load previously saved comparison results and visualize them.
     
@@ -157,7 +165,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Compare DQN and Double DQN')
     parser.add_argument('--run', action='store_true', help='Run new comparison')
     parser.add_argument('--episodes', type=int, default=150, help='Number of episodes')
-    parser.add_argument('--runs', type=int, default=3, help='Number of runs to average')
+    parser.add_argument('--runs', type=int, default=2, help='Number of runs to average')
     parser.add_argument('--visualize', action='store_true', help='Visualize saved results')
     
     args = parser.parse_args()
