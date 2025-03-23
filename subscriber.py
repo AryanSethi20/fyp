@@ -6,6 +6,7 @@ from collections import deque
 import logging
 import numpy as np
 
+
 class MQTTEnvironment:
     def __init__(self):
         self.broker = "192.168.0.105"
@@ -20,37 +21,40 @@ class MQTTEnvironment:
 
         # ACK size configuration with predefined payloads
         self.ack_sizes = {
-            "tiny": 16,       # 16 bytes
-            "small": 64,      # 64 bytes
-            "medium": 256,    # 256 bytes
-            "large": 1024,    # 1KB
-            "xlarge": 4096    # 4KB
-        }
-        
-        # Predefined fixed ACK messages for each size
-        self.ack_payloads = {
-            # Tiny ACK (16 bytes)
-            "tiny": '{"ack":"ACK"}',
-            
-            # Small ACK (64 bytes)
-            "small": '{"ack":"ACK","ts":0,"id":"fixed-small-ack","padding":"XXXXXXXXXXXXX"}',
-            
-            # Medium ACK (256 bytes)
-            "medium": '{"ack":"ACK","timestamp":0,"id":"fixed-medium-ack","size":"medium","padding":"' + 'X' * 185 + '"}',
-            
-            # Large ACK (1KB)
-            "large": '{"ack":"ACK","timestamp":0,"id":"fixed-large-ack","size":"large","padding":"' + 'X' * 953 + '"}',
-            
-            # Extra large ACK (4KB)
-            "xlarge": '{"ack":"ACK","timestamp":0,"id":"fixed-xlarge-ack","size":"xlarge","padding":"' + 'X' * 4025 + '"}'
+            "tiny": 16,  # 16 bytes
+            "small": 64,  # 64 bytes
+            "medium": 256,  # 256 bytes
+            "large": 1024,  # 1KB
+            "xlarge": 4096,  # 4KB
         }
 
-        self.ack_size = "large"
+        # Predefined fixed ACK messages for each size
+        self.ack_payloads = {
+            "tiny": '{"ack":"ACK","pad":"X"}',
+            "small": '{"ack":"ACK","ts":0,"id":"fixed-small-ack","padding":"'
+            + "X" * 32
+            + '"}',
+            "medium": '{"ack":"ACK","timestamp":0,"id":"fixed-medium-ack","size":"medium","padding":"'
+            + "X" * 185
+            + '"}',
+            "halfkb": '{"ack":"ACK","timestamp":0,"id":"fixed-halfkb-ack","size":"halfkb","padding":"'
+            + "X" * 441
+            + '"}',
+            "large": '{"ack":"ACK","timestamp":0,"id":"fixed-large-ack","size":"large","padding":"'
+            + "X" * 953
+            + '"}',
+            "xlarge": '{"ack":"ACK","timestamp":0,"id":"fixed-xlarge-ack","size":"xlarge","padding":"'
+            + "X" * 4025
+            + '"}',
+        }
+
+        self.ack_size = "halfkb"
+
 
 class EnhancedMQTTSubscriber:
     def __init__(self):
         self.env = MQTTEnvironment()
-        self.client_id = f'subscribe-{random.randint(0, 1000)}'
+        self.client_id = f"subscribe-{random.randint(0, 1000)}"
         self.client = mqtt_client.Client(client_id=self.client_id)
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
@@ -59,10 +63,12 @@ class EnhancedMQTTSubscriber:
     def on_connect(self, client, userdata, flags, rc):
         if rc == 0:
             self.logger.info("Subscriber connected to MQTT Broker!")
-            self.client.subscribe([
-                (f"{self.env.status_update_topic}/CU", 0),
-                (f"{self.env.status_update_topic}/ZW", 0),
-            ])
+            self.client.subscribe(
+                [
+                    (f"{self.env.status_update_topic}/CU", 0),
+                    (f"{self.env.status_update_topic}/ZW", 0),
+                ]
+            )
         else:
             self.logger.error(f"Failed to connect, return code {rc}")
 
@@ -72,7 +78,7 @@ class EnhancedMQTTSubscriber:
             # self.logger.info(f"Received message: {msg.payload.decode()}")
             status_update = json.loads(msg.payload)
             mu = status_update["service_rate"]
-            service_time = np.random.exponential(scale= 1 / mu)
+            service_time = np.random.exponential(scale=1 / mu)
             paoi = time.time() - status_update["generation_time"] + service_time
 
             # Send ACK for ZW policy
@@ -85,7 +91,9 @@ class EnhancedMQTTSubscriber:
             self.env.paoi_window.append(paoi)
             if status_update["total_updates"] % self.env.window_size == 0:
                 self.logger.info("Sending status updates to RL Agent for training")
-                self.client.publish(self.env.send_status_update_topic, json.dumps(self.observe_paoi()))
+                self.client.publish(
+                    self.env.send_status_update_topic, json.dumps(self.observe_paoi())
+                )
                 self.reset_paoi_window()
             # print(f"Updated PAoI window: {list(self.env.paoi_window)}")
 
@@ -97,24 +105,26 @@ class EnhancedMQTTSubscriber:
         try:
             # Get the predefined payload for the current ACK size
             payload = self.env.ack_payloads[self.env.ack_size]
-            
+
             # Add timestamp to the payload if it's not tiny
             if self.env.ack_size != "tiny":
                 # Replace the 0 timestamp with current time
                 # This simple string replacement avoids having to re-parse and re-serialize JSON
                 payload = payload.replace('"ts":0', f'"ts":{time.time()}')
                 payload = payload.replace('"timestamp":0', f'"timestamp":{time.time()}')
-            
+
             # Send the predefined ACK
             result = self.client.publish(self.env.ack_topic, payload)
-            
+
             # Check if publish was successful
             if result.rc == mqtt_client.MQTT_ERR_SUCCESS:
                 actual_size = len(payload.encode())
-                self.logger.info(f"ACK sent successfully: {self.env.ack_size} size, {actual_size} bytes")
+                self.logger.info(
+                    f"ACK sent successfully: {self.env.ack_size} size, {actual_size} bytes"
+                )
             else:
                 self.logger.error(f"Failed to publish ACK, result code: {result.rc}")
-                
+
         except Exception as e:
             self.logger.error(f"Error sending ACK: {e}")
             # Fallback to simple ACK in case of any error
@@ -135,6 +145,7 @@ class EnhancedMQTTSubscriber:
         if len(self.env.paoi_window) == 0:
             return 0.0
         return np.mean(self.env.paoi_window)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)

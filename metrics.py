@@ -18,9 +18,10 @@ def plot_training_metrics(metrics_file="training_metrics.json"):
     all_runs_aoi = []
 
     # Load and process data from all runs
-    for i in range(1, 2):
+    files = ["ddqn/service-rate/new-config/final_double_dqn_metrics-rate=5.json", "ddqn/service-rate/new-config/final_double_dqn_metrics-rate=5-2.json"]
+    for i in range(2):
         try:
-            with open(metrics_file + f"final_double_dqn_metrics.json", 'r') as f:
+            with open(files[i], 'r') as f:
                 metrics = json.load(f)
 
             # Extract and trim data to desired length
@@ -136,7 +137,7 @@ def plot_training_metrics(metrics_file="training_metrics.json"):
 
     # Print summary statistics
     print("\nTraining Summary Statistics:")
-    print(f"Number of Runs: 4")
+    print(f"Number of Runs: 2")
     print(f"Episodes per Run: {num_episodes}")
     print(f"Actions per Episode: {actions_per_episode}")
     print("\nRewards:")

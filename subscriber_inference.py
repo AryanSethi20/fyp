@@ -45,11 +45,11 @@ class InferenceSubscriber:
         self.new_actions_topic = "artc1/new_actions"
 
         # State tracking
-        self.window_size = 5
+        self.window_size = 10
         self.aoi_window = deque(maxlen=self.window_size)
         self.current_policy = 0
-        self.mu = 2.0  # Starting values matching training
-        self.lambda_rate = 1.0
+        self.mu = 5.0
+        self.lambda_rate = 4.0
         self.last_generation_time = None
 
         # Setup model with training parameters
@@ -72,15 +72,43 @@ class InferenceSubscriber:
         }
         
         # Add batch processing variables
-        self.batch_size = 5
+        self.batch_size = 10
         self.current_batch = []
         self.batch_ready = False
+
+        self.ack_sizes = {
+            "tiny": 16,       # 16 bytes
+            "small": 64,      # 64 bytes
+            "medium": 256,    # 256 bytes
+            "large": 1024,    # 1KB
+            "xlarge": 4096    # 4KB
+        }
+        
+        # Predefined fixed ACK messages for each size
+        self.ack_payloads = {
+            # Tiny ACK (16 bytes)
+            "tiny": '{"ack":"ACK"}',
+            
+            # Small ACK (64 bytes)
+            "small": '{"ack":"ACK","ts":0,"id":"fixed-small-ack","padding":"XXXXXXXXXXXXX"}',
+            
+            # Medium ACK (256 bytes)
+            "medium": '{"ack":"ACK","timestamp":0,"id":"fixed-medium-ack","size":"medium","padding":"' + 'X' * 185 + '"}',
+            
+            # Large ACK (1KB)
+            "large": '{"ack":"ACK","timestamp":0,"id":"fixed-large-ack","size":"large","padding":"' + 'X' * 953 + '"}',
+            
+            # Extra large ACK (4KB)
+            "xlarge": '{"ack":"ACK","timestamp":0,"id":"fixed-xlarge-ack","size":"xlarge","padding":"' + 'X' * 4025 + '"}'
+        }
+
+        self.ack_size = "tiny"
 
     def setup_model(self, model_path):
         # Match training parameters exactly
         self.policies = [0, 1]
-        self.mu_values = np.linspace(2.0, 6.0, 2)  # Match your training values
-        self.ratios = np.linspace(0.2, 0.9, 2)
+        self.mu_values = np.linspace(1.0, 5.0, 2)
+        self.ratios = np.linspace(0.3, 0.8, 2)
 
         # Create action space
         self.action_space = []
@@ -117,6 +145,7 @@ class InferenceSubscriber:
     def on_message(self, client, userdata, msg):
         try:
             # logger.debug(f"Received message: {msg.payload.decode()}")
+            current_time = time.time()
             status_update = json.loads(msg.payload)
             
             # Send ACK for ZW policy
@@ -124,7 +153,6 @@ class InferenceSubscriber:
                 self.client.publish(self.ack_topic, "ACK")
                 
             # Calculate PAoI
-            current_time = time.time()
             mu = status_update["service_rate"]
             service_time = np.random.exponential(scale=1/mu)
             paoi = current_time - status_update["generation_time"] + service_time
@@ -146,6 +174,7 @@ class InferenceSubscriber:
             
             # Process complete batch
             if len(self.current_batch) >= self.batch_size:
+                time.sleep(2)
                 
                 # Update the AoI window with the full batch
                 self.aoi_window = deque(self.current_batch, maxlen=self.batch_size)
@@ -206,6 +235,34 @@ class InferenceSubscriber:
         }
         with open('inference_metrics.json', 'w') as f:
             json.dump(metrics_dict, f, indent=4)
+    
+    def send_fixed_size_ack(self):
+        """Send ACK with a predefined fixed payload for the configured size"""
+        try:
+            # Get the predefined payload for the current ACK size
+            payload = self.env.ack_payloads[self.env.ack_size]
+            
+            # Add timestamp to the payload if it's not tiny
+            if self.env.ack_size != "tiny":
+                # Replace the 0 timestamp with current time
+                # This simple string replacement avoids having to re-parse and re-serialize JSON
+                payload = payload.replace('"ts":0', f'"ts":{time.time()}')
+                payload = payload.replace('"timestamp":0', f'"timestamp":{time.time()}')
+            
+            # Send the predefined ACK
+            result = self.client.publish(self.env.ack_topic, payload)
+            
+            # Check if publish was successful
+            if result.rc == mqtt_client.MQTT_ERR_SUCCESS:
+                actual_size = len(payload.encode())
+                self.logger.info(f"ACK sent successfully: {self.env.ack_size} size, {actual_size} bytes")
+            else:
+                self.logger.error(f"Failed to publish ACK, result code: {result.rc}")
+                
+        except Exception as e:
+            self.logger.error(f"Error sending ACK: {e}")
+            # Fallback to simple ACK in case of any error
+            self.client.publish(self.env.ack_topic, "ACK")
 
     def run(self):
         try:
@@ -221,7 +278,7 @@ class InferenceSubscriber:
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    subscriber = InferenceSubscriber("/Users/aryansethi/Documents/Personal/fyp/Runs/9/final_model-6thSize.pth")
+    subscriber = InferenceSubscriber("/Users/aryansethi20/Downloads/fyp/ddqn/payload/final_dqn_model-4thSize-1.pth")
     subscriber.run()
 
 if __name__ == "__main__":

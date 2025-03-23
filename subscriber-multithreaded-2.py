@@ -45,10 +45,10 @@ class MultithreadedSubscriber:
         self.new_actions_topic = "artc1/new_actions"
 
         # State tracking
-        self.window_size = 5
+        self.window_size = 10
         self.current_policy = 0
-        self.mu = 2.0
-        self.lambda_rate = 1.0
+        self.mu = 5.0
+        self.lambda_rate = 1.5
 
         # Setup model with training parameters
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -89,6 +89,34 @@ class MultithreadedSubscriber:
         
         # Running flag
         self.running = True
+
+        self.ack_sizes = {
+            "tiny": 16,       # 16 bytes
+            "small": 64,      # 64 bytes
+            "medium": 256,    # 256 bytes
+            "large": 1024,    # 1KB
+            "xlarge": 4096    # 4KB
+        }
+        
+        # Predefined fixed ACK messages for each size
+        self.ack_payloads = {
+            # Tiny ACK (16 bytes)
+            "tiny": '{"ack":"ACK"}',
+            
+            # Small ACK (64 bytes)
+            "small": '{"ack":"ACK","ts":0,"id":"fixed-small-ack","padding":"XXXXXXXXXXXXX"}',
+            
+            # Medium ACK (256 bytes)
+            "medium": '{"ack":"ACK","timestamp":0,"id":"fixed-medium-ack","size":"medium","padding":"' + 'X' * 185 + '"}',
+            
+            # Large ACK (1KB)
+            "large": '{"ack":"ACK","timestamp":0,"id":"fixed-large-ack","size":"large","padding":"' + 'X' * 953 + '"}',
+            
+            # Extra large ACK (4KB)
+            "xlarge": '{"ack":"ACK","timestamp":0,"id":"fixed-xlarge-ack","size":"xlarge","padding":"' + 'X' * 4025 + '"}'
+        }
+
+        self.ack_size = "tiny"
 
     def setup_model(self, model_path):
         # Match training parameters exactly
@@ -131,7 +159,7 @@ class MultithreadedSubscriber:
             # Send ACK immediately for ZW policy to avoid timeouts
             if status_update["policy"] == "ZW":
                 # logger.info(f"ACK sent for update - {status_update["total_updates"]}")
-                self.client.publish(self.ack_topic, "ACK")
+                self.send_fixed_size_ack()
                 
             # # Calculate PAoI
             # current_time = time.time()
@@ -163,7 +191,7 @@ class MultithreadedSubscriber:
             
             # Add to processing queue
             self.paoi_queue.put({
-                'paoi': network_delay, 
+                'paoi': theoretical_paoi, 
                 'policy': status_update["policy"],
                 'mu': mu,
                 'time': current_time,
@@ -290,6 +318,34 @@ class MultithreadedSubscriber:
         with open('inference_metrics-2.json', 'w') as f:
             json.dump(metrics_dict, f, indent=4)
 
+    def send_fixed_size_ack(self):
+        """Send ACK with a predefined fixed payload for the configured size"""
+        try:
+            # Get the predefined payload for the current ACK size
+            payload = self.ack_payloads[self.ack_size]
+            
+            # Add timestamp to the payload if it's not tiny
+            if self.ack_size != "tiny":
+                # Replace the 0 timestamp with current time
+                # This simple string replacement avoids having to re-parse and re-serialize JSON
+                payload = payload.replace('"ts":0', f'"ts":{time.time()}')
+                payload = payload.replace('"timestamp":0', f'"timestamp":{time.time()}')
+            
+            # Send the predefined ACK
+            result = self.client.publish(self.ack_topic, payload)
+            
+            # Check if publish was successful
+            if result.rc == mqtt_client.MQTT_ERR_SUCCESS:
+                actual_size = len(payload.encode())
+                # logger.info(f"ACK sent successfully: {self.ack_size} size, {actual_size} bytes")
+            else:
+                logger.error(f"Failed to publish ACK, result code: {result.rc}")
+                
+        except Exception as e:
+            logger.error(f"Error sending ACK: {e}")
+            # Fallback to simple ACK in case of any error
+            self.client.publish(self.ack_topic, "ACK")
+
     def run(self):
         try:
             # Connect MQTT client
@@ -321,7 +377,7 @@ class MultithreadedSubscriber:
             logger.info("Subscriber shutdown complete")
 
 def main():
-    subscriber = MultithreadedSubscriber("/Users/aryansethi20/Downloads/fyp/Runs/10/final_model-rate=5.pth")
+    subscriber = MultithreadedSubscriber("/Users/aryansethi20/Downloads/fyp/ddqn/payload/final_dqn_model-4thSize-1.pth")
     subscriber.run()
 
 if __name__ == "__main__":

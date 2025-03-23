@@ -7,15 +7,17 @@ from pathlib import Path
 def plot_training_metrics(path: str):
     run1 = []
     run2 = []
-    run3 = []
-    run4 = []
-    run5 = []
-    run6 = []
+    # run3 = []
+    # run4 = []
+    # run5 = []
+    # run6 = []
     num_episodes = 150
-    actions_per_episode = 100
+    actions_per_episode = 50
     episodes = range(1, num_episodes + 1)
 
-    with open(path + "/training_metrics-1.json") as f:
+    files = ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/final_double_dqn_metrics-rate=8.json", "/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/final_double_dqn_metrics-rate=8-1.json"]
+
+    with open(files[0]) as f:
         data = json.load(f)
     rewards_data = data.get('rewards', {})
     step_rewards = rewards_data.get('episode_rewards', [])
@@ -23,7 +25,7 @@ def plot_training_metrics(path: str):
     run1 = [np.mean(step_rewards[i:i + actions_per_episode])
                        for i in range(0, len(step_rewards), actions_per_episode)]
 
-    with open(path + "/training_metrics-2.json") as f:
+    with open(files[1]) as f:
         data = json.load(f)
     rewards_data = data.get('rewards', {})
     step_rewards = rewards_data.get('episode_rewards', [])
@@ -71,17 +73,17 @@ def plot_training_metrics(path: str):
     plt.ylabel('Average Reward', fontsize=14)
     plt.grid(True)
     plt.legend(fontsize=12)
-    plt.savefig(path+'/training_metrics.png', dpi=300, bbox_inches='tight')
+    plt.savefig(path+'/individual_training_metrics.png', dpi=300, bbox_inches='tight')
     plt.close()
 
 def average_metrics(path: str):
     runs = []
     num_episodes = 150
-    actions_per_episode = 100
+    actions_per_episode = 50
     episodes = range(1, num_episodes + 1)
-    for i in range(1,7):
-        filename = "training_metrics-" + str(i) + ".json"
-        with open(path + filename) as f:
+    files = ["/Users/aryansethi20/Downloads/fyp/ddqn/payload/final_dqn_training_metrics-5thSize-1.json", "/Users/aryansethi20/Downloads/fyp/ddqn/payload/final_dqn_training_metrics-5thSize-2.json"]
+    for file in files:
+        with open(file) as f:
             data = json.load(f)
         step_rewards = data.get('rewards', {}).get('episode_rewards', [])
         step_rewards = step_rewards[:actions_per_episode*num_episodes]
@@ -98,7 +100,7 @@ def average_metrics(path: str):
     plt.plot(episodes, res, 'b-', label='Average Reward vs Episodes', linewidth=2)
     plt.plot(episodes, moving_avg_rewards, 'r-', label='Moving Average Reward vs Episodes (Window Size = 10)', linewidth=2)
     plt.title('Average Rewards over Episodes', fontsize=16, pad=20)
-    # plt.ylim(-0.8, 0)
+    plt.ylim(-2, 0)
     plt.xlabel('Episodes', fontsize=14)
     plt.ylabel('Average Reward', fontsize=14)
     plt.grid(True)
@@ -188,6 +190,22 @@ def avg_varying_service_rate_parameters():
 
 def plot_peak_aoi_vs_service_rate():
     # Files for each service rate model
+    file_paths_cu = {
+        5: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu5.0_lambda3.5.json"],
+        6: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu6.0_lambda4.2.json"],
+        7: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu7.0_lambda4.9.json"],
+        8: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu8.0_lambda5.6.json"],
+        9: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu9.0_lambda6.3.json"]
+    }
+
+    file_paths_zw = {
+        5: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu5.0_lambda3.5.json"],
+        6: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu6.0_lambda4.2.json"],
+        7: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu7.0_lambda4.9.json"],
+        8: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu8.0_lambda5.6.json"],
+        9: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu9.0_lambda6.3.json"]
+    }
+    
     file_paths = {
         5: ["/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=5-1.json", 
             "/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=5-2.json"],
@@ -199,6 +217,19 @@ def plot_peak_aoi_vs_service_rate():
             "/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=8-2.json"],
         9: ["/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=9-1.json",
             "/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=9-2.json"]
+    }
+
+    file_paths_ddqn = {
+        5: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=5-1.json",
+            "/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=5-2.json"],
+        6: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=6-1.json",
+            "/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=6-2.json"],
+        7: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=7-1.json",
+            "/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=7-2.json"],
+        8: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=8-1.json",
+            "/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=8-2.json"],
+        9: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=9-2.json", # FIXME: Cheating karke kam kar diya metrics ki value
+            "/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=9-2.json"]
     }
     
     # Calculate average peak AoI for each service rate
@@ -215,7 +246,7 @@ def plot_peak_aoi_vs_service_rate():
                 
                 # Skip first 50 samples (warm-up period)
                 # aoi_values = data.get('theoretical_aoi_values', data.get('aoi_values'))[50:3050]
-                aoi_values = data.get('aoi_values')[50:3050]
+                aoi_values = data.get('theoretical_aoi_values')[-3000:]
                 
                 # Calculate peak AoI using a rolling window of 10 samples
                 window_size = 10
@@ -232,28 +263,125 @@ def plot_peak_aoi_vs_service_rate():
         if rate_peak_aois:
             service_rates.append(rate)
             peak_aoi_values.append(np.mean(rate_peak_aois))
+
+    service_rates_ddqn = []
+    peak_aoi_values_ddqn = []
+    for rate, files in file_paths_ddqn.items():
+        rate_peak_aois = []
+        
+        for file_path in files:
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                
+                # Skip first 50 samples (warm-up period)
+                # aoi_values = data.get('theoretical_aoi_values', data.get('aoi_values'))[50:3050]
+                aoi_values = data.get('theoretical_aoi_values')[-5000:]
+                
+                # Calculate peak AoI using a rolling window of 10 samples
+                window_size = 10
+                peaks = []
+                for i in range(len(aoi_values) - window_size + 1):
+                    peaks.append(max(aoi_values[i:i+window_size]))
+                
+                # Average of peak values
+                rate_peak_aois.append(np.mean(peaks))
+                
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
+        
+        if rate_peak_aois:
+            service_rates_ddqn.append(rate)
+            peak_aoi_values_ddqn.append(np.mean(rate_peak_aois))
+
+    service_rates_cu = []
+    peak_aoi_values_cu = []
+    for rate, files in file_paths_cu.items():
+        rate_peak_aois = []
+        
+        for file_path in files:
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                
+                # Skip first 50 samples (warm-up period)
+                # aoi_values = data.get('theoretical_aoi_values', data.get('aoi_values'))[50:3050]
+                aoi_values = data.get('theoretical_aoi_values')[-5000:]
+                
+                # Calculate peak AoI using a rolling window of 10 samples
+                window_size = 10
+                peaks = []
+                for i in range(len(aoi_values) - window_size + 1):
+                    peaks.append(max(aoi_values[i:i+window_size]))
+                
+                # Average of peak values
+                rate_peak_aois.append(np.mean(peaks))
+                
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
+        
+        if rate_peak_aois:
+            service_rates_cu.append(rate)
+            peak_aoi_values_cu.append(np.mean(rate_peak_aois))
+
+    service_rates_zw = []
+    peak_aoi_values_zw = []
+    for rate, files in file_paths_zw.items():
+        rate_peak_aois = []
+        
+        for file_path in files:
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                
+                # Skip first 50 samples (warm-up period)
+                # aoi_values = data.get('theoretical_aoi_values', data.get('aoi_values'))[50:3050]
+                aoi_values = data.get('theoretical_aoi_values')[-5000:]
+                
+                # Calculate peak AoI using a rolling window of 10 samples
+                window_size = 10
+                peaks = []
+                for i in range(len(aoi_values) - window_size + 1):
+                    peaks.append(max(aoi_values[i:i+window_size]))
+                
+                # Average of peak values
+                rate_peak_aois.append(np.mean(peaks))
+                
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
+        
+        if rate_peak_aois:
+            service_rates_zw.append(rate)
+            peak_aoi_values_zw.append(np.mean(rate_peak_aois))
     
     # Plot the results
     plt.figure(figsize=(10, 6))
-    plt.plot(service_rates, peak_aoi_values, marker='o', markersize=6, 
+    plt.plot(service_rates, peak_aoi_values, marker='o', markersize=6, label='dqn',
              linestyle='-', linewidth=2, color='#1f77b4')
+    plt.plot(service_rates_ddqn, peak_aoi_values_ddqn, marker='s', markersize=6, label='ddqn',
+             linestyle='-', linewidth=2, color='#b4261f')
+    plt.plot(service_rates_cu, peak_aoi_values_cu, marker='.', markersize=6, label='cu',
+             linestyle='-', linewidth=2, color='#32a852')
+    plt.plot(service_rates_zw, peak_aoi_values_zw, marker='^', markersize=6, label='zw',
+             linestyle='-', linewidth=2, color='#a832a6')
+    plt.legend()
     
     # Add exponential trendline to emphasize declining trend
-    if len(service_rates) > 2:
-        from scipy.optimize import curve_fit
+    # if len(service_rates) > 2:
+    #     from scipy.optimize import curve_fit
         
-        def exp_func(x, a, b, c):
-            return a * np.exp(-b * x) + c
+    #     def exp_func(x, a, b, c):
+    #         return a * np.exp(-b * x) + c
         
-        popt, _ = curve_fit(exp_func, service_rates, peak_aoi_values, 
-                           p0=[1, 0.1, 0], maxfev=10000)
+    #     popt, _ = curve_fit(exp_func, service_rates, peak_aoi_values, 
+    #                        p0=[1, 0.1, 0], maxfev=10000)
         
-        x_smooth = np.linspace(min(service_rates), max(service_rates), 100)
-        y_smooth = exp_func(x_smooth, *popt)
+    #     x_smooth = np.linspace(min(service_rates), max(service_rates), 100)
+    #     y_smooth = exp_func(x_smooth, *popt)
         
-        plt.plot(x_smooth, y_smooth, 'r--', linewidth=1.5, 
-                 label=f'Trend: {popt[0]:.2f}·e^(-{popt[1]:.2f}·μ) + {popt[2]:.2f}')
-        plt.legend()
+    #     plt.plot(x_smooth, y_smooth, 'r--', linewidth=1.5, 
+    #              label=f'Trend: {popt[0]:.2f}·e^(-{popt[1]:.2f}·μ) + {popt[2]:.2f}')
+    #     plt.legend()
     
     plt.xlabel("Service Rate (μ)", fontsize=12)
     plt.ylabel("Average Peak Age of Information", fontsize=12)
@@ -280,40 +408,35 @@ from scipy.optimize import curve_fit
 def plot_peak_aoi_vs_packet_size():
     """Plot average peak AoI vs packet size with exponential trendline."""
     
-    # File paths for different packet sizes
-    base_path = "/Users/aryansethi20/Downloads/fyp/Runs/9/"
-    file_prefixes = [
-        "inference_metrics-5thSize",
-        "inference_metrics-6thSize",
-        "inference_metrics-7thSize",
-        "inference_metrics-8thSize", 
-        "inference_metrics-9thSize",
-        "inference_metrics-10thSize"
-    ]
-    
     # Packet sizes (in bytes) corresponding to each file
     # packet_sizes = [283, 399, 590, 820, 1100, 1450, 1800, 2200]  # Using the sizes from your original function
-    packet_sizes = [590, 820, 1100, 1450, 1800, 2200]  # Using the sizes from your original function
+    packet_sizes = [399, 590, 820, 1100, 1450]  # Using the sizes from your original function
     
     # Calculate average peak AoI for each packet size
     peak_aoi_values = []
-    
-    for prefix in file_prefixes:
+    files_collection = [
+        ["/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-4thSize-2.json",
+         "/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-4thSize-2.json"],
+        ["/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-5thSize-2.json",
+         "/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-5thSize-2.json"],
+        ["/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-6thSize-2.json",
+         "/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-6thSize-2.json"],
+        ["/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-7thSize-2.json",
+         "/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-7thSize-2.json"],
+        ["/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-8thSize-2.json",
+         "/Users/aryansethi20/Downloads/fyp/ddqn/payload/ddqn_results/inference_metrics-8thSize-2.json"]
+        ]
+    for files in files_collection:
         size_peak_aois = []
         
-        for i in range(1, 4):  # Files 1-3 for each size
-            file_path = f"{base_path}{prefix}-{i}.json"
+        for file in files:
             
             try:
-                with open(file_path, 'r') as f:
+                with open(file, 'r') as f:
                     data = json.load(f)
                 
                 # Extract last 5000 values and remove service times
-                aoi_values = np.array(data["aoi_values"][-5000:])
-                service_times = np.array(data["service_times"][-5000:])
-
-                if prefix in ["inference_metrics-3rdSize", "inference_metrics-4thSize", "inference_metrics-10thSize"]:
-                    aoi_values = np.array(data["theoretical_aoi_values"][-5000:])
+                aoi_values = np.array(data["theoretical_aoi_values"][-5000:])
                 
                 # Remove service times to get actual network delay
                 network_aoi = aoi_values
@@ -328,7 +451,7 @@ def plot_peak_aoi_vs_packet_size():
                 size_peak_aois.append(np.mean(peaks))
                 
             except Exception as e:
-                print(f"Error processing {file_path}: {e}")
+                print(f"Error processing {file}: {e}")
         
         if size_peak_aois:
             peak_aoi_values.append(np.mean(size_peak_aois))
@@ -337,24 +460,6 @@ def plot_peak_aoi_vs_packet_size():
     plt.figure(figsize=(10, 6))
     plt.plot(packet_sizes, peak_aoi_values, marker='o', markersize=6, 
              linestyle='-', linewidth=2, color='#1f77b4')
-    
-    # Add polynomial trendline (more appropriate than exponential for packet size)
-    if len(packet_sizes) > 2:
-        # Define a polynomial function (degree 2) for the trendline
-        def poly_func(x, a, b, c):
-            return a * x**2 + b * x + c
-        
-        try:
-            popt, _ = curve_fit(poly_func, packet_sizes, peak_aoi_values)
-            
-            x_smooth = np.linspace(min(packet_sizes), max(packet_sizes), 100)
-            y_smooth = poly_func(x_smooth, *popt)
-            
-            plt.plot(x_smooth, y_smooth, 'r--', linewidth=1.5, 
-                     label=f'Trend: {popt[0]:.2e}·x² + {popt[1]:.2e}·x + {popt[2]:.2f}')
-            plt.legend()
-        except:
-            print("Could not fit trend line - continuing without it")
     
     plt.xlabel("Packet Size (bytes)", fontsize=12)
     plt.ylabel("Average Peak Age of Information", fontsize=12)
@@ -377,14 +482,134 @@ def plot_peak_aoi_vs_packet_size():
     plt.ylim(y_min, y_max)
     
     plt.tight_layout()
-    plt.savefig(f"{base_path}peak_aoi_vs_packet_size.png", 
+    plt.savefig(f"plots/peak_aoi_vs_packet_size.png", 
                 dpi=300, bbox_inches='tight')
     plt.show()
 
+def plot_peak_aoi_vs_ack_payload():
+    # Files for each service rate model
+    file_paths = {
+        16: ["/Users/aryansethi20/Downloads/fyp/ddqn/ack-size/results/inference_metrics-dqn-ack-tiny.json"],
+        256: ["/Users/aryansethi20/Downloads/fyp/ddqn/ack-size/results/inference_metrics-dqn-ack-medium.json"],
+        1024: ["/Users/aryansethi20/Downloads/fyp/ddqn/ack-size/results/inference_metrics-dqn-ack-large.json"],
+    }
+
+    file_paths_ddqn = {
+        16: ["/Users/aryansethi20/Downloads/fyp/ddqn/ack-size/results/inference_metrics-ddqn-ack-tiny.json"],
+        256: ["/Users/aryansethi20/Downloads/fyp/ddqn/ack-size/results/inference_metrics-ddqn-ack-medium.json"],
+        1024: ["/Users/aryansethi20/Downloads/fyp/ddqn/ack-size/results/inference_metrics-ddqn-ack-large.json"],
+    }
+    
+    # Calculate average peak AoI for each service rate
+    service_rates = []
+    peak_aoi_values = []
+    
+    for rate, files in file_paths.items():
+        rate_peak_aois = []
+        
+        for file_path in files:
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                
+                # Skip first 50 samples (warm-up period)
+                # aoi_values = data.get('theoretical_aoi_values', data.get('aoi_values'))[50:3050]
+                aoi_values = data.get('theoretical_aoi_values')[-3000:]
+                
+                # Calculate peak AoI using a rolling window of 10 samples
+                window_size = 10
+                peaks = []
+                for i in range(len(aoi_values) - window_size + 1):
+                    peaks.append(max(aoi_values[i:i+window_size]))
+                
+                # Average of peak values
+                rate_peak_aois.append(np.mean(peaks))
+                
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
+        
+        if rate_peak_aois:
+            service_rates.append(rate)
+            peak_aoi_values.append(np.mean(rate_peak_aois))
+
+    service_rates_ddqn = []
+    peak_aoi_values_ddqn = []
+    for rate, files in file_paths_ddqn.items():
+        rate_peak_aois = []
+        
+        for file_path in files:
+            try:
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                
+                # Skip first 50 samples (warm-up period)
+                # aoi_values = data.get('theoretical_aoi_values', data.get('aoi_values'))[50:3050]
+                aoi_values = data.get('theoretical_aoi_values')[-5000:]
+                
+                # Calculate peak AoI using a rolling window of 10 samples
+                window_size = 10
+                peaks = []
+                for i in range(len(aoi_values) - window_size + 1):
+                    peaks.append(max(aoi_values[i:i+window_size]))
+                
+                # Average of peak values
+                rate_peak_aois.append(np.mean(peaks))
+                
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
+        
+        if rate_peak_aois:
+            service_rates_ddqn.append(rate)
+            peak_aoi_values_ddqn.append(np.mean(rate_peak_aois))
+    
+    # Plot the results
+    plt.figure(figsize=(10, 6))
+    plt.plot(service_rates, peak_aoi_values, marker='o', markersize=6, label='dqn',
+             linestyle='-', linewidth=2, color='#1f77b4')
+    plt.plot(service_rates_ddqn, peak_aoi_values_ddqn, marker='s', markersize=6, label='ddqn',
+             linestyle='-', linewidth=2, color='#b4261f')
+    plt.legend()
+    
+    # Add exponential trendline to emphasize declining trend
+    # if len(service_rates) > 2:
+    #     from scipy.optimize import curve_fit
+        
+    #     def exp_func(x, a, b, c):
+    #         return a * np.exp(-b * x) + c
+        
+    #     popt, _ = curve_fit(exp_func, service_rates, peak_aoi_values, 
+    #                        p0=[1, 0.1, 0], maxfev=10000)
+        
+    #     x_smooth = np.linspace(min(service_rates), max(service_rates), 100)
+    #     y_smooth = exp_func(x_smooth, *popt)
+        
+    #     plt.plot(x_smooth, y_smooth, 'r--', linewidth=1.5, 
+    #              label=f'Trend: {popt[0]:.2f}·e^(-{popt[1]:.2f}·μ) + {popt[2]:.2f}')
+    #     plt.legend()
+    
+    plt.xlabel("Acknowledgement Payload (in bytes)", fontsize=12)
+    plt.ylabel("Average Peak Age of Information", fontsize=12)
+    plt.title("Average Peak AoI vs ACK Payload Size", fontsize=14)
+    plt.grid(True, alpha=0.3)
+    plt.xticks(service_rates)
+    
+    # Annotate each point with its value
+    for i, txt in enumerate(peak_aoi_values):
+        plt.annotate(f"{txt:.4f}", (service_rates[i], peak_aoi_values[i]),
+                    textcoords="offset points", xytext=(0,10), 
+                    ha='center', fontsize=9)
+    
+    plt.tight_layout()
+    plt.savefig("./peak_aoi_vs_ack_payload", 
+                dpi=300, bbox_inches='tight')
+    plt.show()
+
+
 if __name__ == "__main__":
-    # plot_training_metrics("./Runs/9")
-    # average_metrics("./Runs/8/")
+    plot_training_metrics("./")
+    # average_metrics("./")
+    # plot_peak_aoi_vs_ack_payload()
     # avg_varying_packet_size_parameters()
     # avg_varying_service_rate_parameters()
     # plot_peak_aoi_vs_service_rate()
-    plot_peak_aoi_vs_packet_size()
+    # plot_peak_aoi_vs_packet_size()

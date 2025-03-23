@@ -238,8 +238,8 @@ class MultithreadedPublisher:
         self.config_lock = Lock()
         self.config = {
             "policy": "CU",
-            "mu": 2.0,
-            "lambda_rate": 1.0,
+            "mu": 1.0,
+            "lambda_rate": 5.0,
             "batch_id": 0
         }
         self.update_count = 0
