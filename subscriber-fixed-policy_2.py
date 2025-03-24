@@ -100,8 +100,9 @@ class FixedPolicySubscriber:
             
             # Print stats periodically
             if len(self.metrics['aoi_values']) % 100 == 0:
-                avg_aoi = np.mean(self.metrics['theoretical_aoi_values'][-10:])
-                logger.info(f"Last 100 messages - Avg AoI: {avg_aoi:.4f}s, Policy: {self.policy}")
+                avg_aoi = np.mean(self.metrics['theoretical_aoi_values'][-100:])
+                max_paoi = np.max(self.metrics['theoretical_aoi_values'][-100:])
+                logger.info(f"Last 100 messages - Avg AoI: {avg_aoi:.4f}s, PAoI: {max_paoi:.4f}s, Policy: {self.policy}")
                 
             # No time limit check - we'll run until manually terminated
                 

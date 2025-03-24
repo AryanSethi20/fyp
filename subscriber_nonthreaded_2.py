@@ -115,7 +115,7 @@ class NonThreadedSubscriber:
     def setup_model(self, model_path):
         # Match training parameters exactly
         self.policies = [0, 1]
-        self.mu_values = np.linspace(1.0, 7.0, 2)  # Match your training values
+        self.mu_values = np.linspace(1.0, 5.0, 2)  # Match your training values
         self.ratios = np.linspace(0.3, 0.8, 2)  # Match your training values
 
         # Create action space
@@ -320,7 +320,7 @@ class NonThreadedSubscriber:
             logger.info("Subscriber shutdown complete")
 
 def main():
-    subscriber = NonThreadedSubscriber("/Users/aryansethi20/Downloads/fyp/Runs/10/final_model-rate=7.pth", "inference_metrics-dqn-rate=7-1.json")
+    subscriber = NonThreadedSubscriber("/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/best_double_dqn_model-rate=8.pth", "inference_metrics-ddqn-rate=8-3.json")
     subscriber.run()
 
 if __name__ == "__main__":

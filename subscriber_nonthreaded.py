@@ -320,7 +320,7 @@ class NonThreadedSubscriber:
             logger.info("Subscriber shutdown complete")
 
 def main():
-    subscriber = NonThreadedSubscriber("/Users/aryansethi20/Downloads/fyp/Runs/10/final_model-rate=9.pth", "inference_metrics-dqn-rate=9-1.json")
+    subscriber = NonThreadedSubscriber("/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/best_double_dqn_model-rate=9.pth", "inference_metrics-ddqn-rate=9-3.json")
     subscriber.run()
 
 if __name__ == "__main__":
