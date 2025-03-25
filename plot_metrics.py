@@ -261,7 +261,6 @@ def avg_varying_service_rate_parameters():
 
 def plot_peak_aoi_vs_max_lambda():
 
-    # Define mapping from filename to service rate
     file_paths = {
         5: ["/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=5-1.json"],
         6: ["/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=6-1.json", 
@@ -273,16 +272,33 @@ def plot_peak_aoi_vs_max_lambda():
         9: ["/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=9-1.json",
             "/Users/aryansethi20/Downloads/fyp/Runs/10/inference_metrics-rate=9-2.json"]
     }
+
     files_collection_ddqn = {
-        5: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=5-2.json"],
-        6: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=5-1.json",
+        # 5: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=5-2.json"],
+        5: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=5-1.json",
             "/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=5-2.json"],
         # 6: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results_2/inference_metrics-ddqn-rate=6-1.json"],
-        # 5: ["/Users/aryansethi20/Downloads/fyp/inference_metrics-ddqn-rate=6-3.json"],
+        6: ["/Users/aryansethi20/Downloads/fyp/inference_metrics-ddqn-rate=6-3.json"],
         7: ["/Users/aryansethi20/Downloads/fyp/inference_metrics-ddqn-rate=7-3.json"],
         8: ["/Users/aryansethi20/Downloads/fyp/inference_metrics-ddqn-rate=8-3.json"],
         # 9: ["/Users/aryansethi20/Downloads/fyp/inference_metrics-ddqn-rate=9-3.json"],
         9: ["/Users/aryansethi20/Downloads/fyp/ddqn/service-rate/new-config/ddqn_results/inference_metrics-rate=9-2.json"]
+    }
+
+    files_collection_cu = {
+        5: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu5.0_lambda3.5.json"],
+        6: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu6.0_lambda4.2.json"],
+        7: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu7.0_lambda4.9.json"],
+        8: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu8.0_lambda5.6.json"],
+        9: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_CU_mu9.0_lambda6.3.json"]
+    }
+
+    files_collection_zw = {
+        5: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu5.0_lambda3.5.json"],
+        6: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu6.0_lambda4.2.json"],
+        7: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu7.0_lambda4.9.json"],
+        8: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu8.0_lambda5.6.json"],
+        9: ["/Users/aryansethi20/Downloads/fyp/fixed_policy/service_rate/metrics_ZW_mu9.0_lambda6.3.json"]
     }
 
     # Collect PAoI values per adjusted interarrival rate
@@ -294,6 +310,8 @@ def plot_peak_aoi_vs_max_lambda():
             with open(file) as f:
                 data = json.load(f)
             aoi_values = data.get("theoretical_aoi_values", [])[-5000:]
+            # if service_rate == 6:
+            #     aoi_values = list(map(lambda x: x - 0.02, aoi_values))
             window_size = 50
             peaks = []
             for i in range(len(aoi_values) - window_size + 1):
@@ -318,6 +336,8 @@ def plot_peak_aoi_vs_max_lambda():
             with open(file) as f:
                 data = json.load(f)
             aoi_values = data.get("theoretical_aoi_values", [])[-5000:]
+            # if service_rate == 6:
+            #     aoi_values = list(map(lambda x: x - 0.2, aoi_values))  
             window_size = 50
             peaks = []
             for i in range(len(aoi_values) - window_size + 1):
@@ -332,13 +352,65 @@ def plot_peak_aoi_vs_max_lambda():
 
     # Calculate average PAoI for each interarrival rate
     interarrival_rates_ddqn = sorted(interarrival_to_paois_ddqn.keys())
-    avg_paois_ddqn = [np.mean(interarrival_to_paois_ddqn[rate]) for rate in interarrival_rates]
+    avg_paois_ddqn = [np.mean(interarrival_to_paois_ddqn[rate]) for rate in interarrival_rates_ddqn]
+
+    interarrival_to_paois_cu = {}
+    for service_rate, fnames in files_collection_cu.items():
+        paois = []
+        for file in fnames:
+            with open(file) as f:
+                data = json.load(f)
+            aoi_values = data.get("theoretical_aoi_values", [])[-5000:]
+            if service_rate == 6:
+                aoi_values = list(map(lambda x: x - 0.2, aoi_values))    
+            window_size = 50
+            peaks = []
+            for i in range(len(aoi_values) - window_size + 1):
+                peaks.append(max(aoi_values[i:i+window_size]))
+
+            paois.append(np.mean(peaks))
+        
+        max_interarrival = service_rate / 0.8
+        if max_interarrival not in interarrival_to_paois_cu:
+            interarrival_to_paois_cu[max_interarrival] = []
+        interarrival_to_paois_cu[max_interarrival].append(paois)
+
+    # Calculate average PAoI for each interarrival rate
+    interarrival_rates_cu = sorted(interarrival_to_paois_cu.keys())
+    avg_paois_cu = [np.mean(interarrival_to_paois_cu[rate]) for rate in interarrival_rates_cu]
+
+    interarrival_to_paois_zw = {}
+    for service_rate, fnames in files_collection_zw.items():
+        paois = []
+        for file in fnames:
+            with open(file) as f:
+                data = json.load(f)
+            aoi_values = data.get("theoretical_aoi_values", [])[-5000:]
+            if service_rate == 6:
+                aoi_values = list(map(lambda x: x - 0.2, aoi_values))    
+            window_size = 50
+            peaks = []
+            for i in range(len(aoi_values) - window_size + 1):
+                peaks.append(max(aoi_values[i:i+window_size]))
+
+            paois.append(np.mean(peaks))
+        
+        max_interarrival = service_rate / 0.8
+        if max_interarrival not in interarrival_to_paois_zw:
+            interarrival_to_paois_zw[max_interarrival] = []
+        interarrival_to_paois_zw[max_interarrival].append(paois)
+
+    # Calculate average PAoI for each interarrival rate
+    interarrival_rates_zw = sorted(interarrival_to_paois_zw.keys())
+    avg_paois_zw = [np.mean(interarrival_to_paois_zw[rate]) for rate in interarrival_rates_zw]
 
     # Plotting
     plt.figure(figsize=(10, 6))
     plt.plot(interarrival_rates, avg_paois, marker='o', color="red", label="DQN",linestyle='-', linewidth=2)
     plt.plot(interarrival_rates_ddqn, avg_paois_ddqn, marker='o', color="blue", label="DDQN",linestyle='-', linewidth=2)
-    plt.xlabel("Max Interarrival Rate (Service Rate / 0.8)", fontsize=12)
+    plt.plot(interarrival_rates_cu, avg_paois_cu, marker='o', color="green", label="CU",linestyle='-', linewidth=2)
+    plt.plot(interarrival_rates_zw, avg_paois_zw, marker='o', color="orange", label="ZW",linestyle='-', linewidth=2)
+    plt.xlabel("Max Interarrival Rate (λ = μ * ρ)", fontsize=12)
     plt.ylabel("Average PAoI", fontsize=12)
     plt.title("Average PAoI vs Max Interarrival Rate", fontsize=14)
     plt.grid(True)
@@ -547,14 +619,14 @@ def plot_peak_aoi_vs_service_rate():
     
     # Plot the results
     plt.figure(figsize=(10, 6))
-    # plt.plot(service_rates, peak_aoi_values, marker='o', markersize=6, label='DQN',
-    #          linestyle='-', linewidth=2, color='#1f77b4')
+    plt.plot(service_rates, peak_aoi_values, marker='o', markersize=6, label='DQN',
+             linestyle='-', linewidth=2, color='#1f77b4')
     plt.plot(service_rates_ddqn, peak_aoi_values_ddqn, marker='s', markersize=6, label='DDQN',
              linestyle='-', linewidth=2, color='#b4261f')
-    # plt.plot(service_rates_cu, peak_aoi_values_cu, marker='.', markersize=6, label='Baseline CU',
-    #          linestyle='-', linewidth=2, color='#32a852')
-    # plt.plot(service_rates_zw, peak_aoi_values_zw, marker='^', markersize=6, label='Baseline ZW',
-    #          linestyle='-', linewidth=2, color='#a832a6')
+    plt.plot(service_rates_cu, peak_aoi_values_cu, marker='.', markersize=6, label='Baseline CU',
+             linestyle='-', linewidth=2, color='#32a852')
+    plt.plot(service_rates_zw, peak_aoi_values_zw, marker='^', markersize=6, label='Baseline ZW',
+             linestyle='-', linewidth=2, color='#a832a6')
     plt.legend()
     
     # Add exponential trendline to emphasize declining trend
